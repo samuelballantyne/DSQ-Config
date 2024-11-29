@@ -2,6 +2,8 @@
 #include "ui_mainwindow.h"
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QFile>
+#include <QDir>
 #include <QTextStream>
 
 MainWindow::MainWindow(QWidget *parent) :
@@ -41,7 +43,7 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->demulShooterPathLineEdit->setText("C:/DemulShooter/");
     connect(ui->browseDemulButton, &QPushButton::clicked, this, &MainWindow::browseDemulPath);
 
-    ui->iniPathLineEdit->setText("C:/QMamehooker/ini/");
+    ui->iniPathLineEdit->setText("C:/QMamehooker/ini");
     connect(ui->browseIniButton, &QPushButton::clicked, this, &MainWindow::browseIniPath);
 
 
@@ -671,7 +673,7 @@ void MainWindow::exportAllFiles()
             batFile.close();
         }
 
-        QFile iniFile(iniPath + "\" + rom + ".ini");
+        QFile iniFile(iniPath + "/" + rom + ".ini");
         if (iniFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
             QTextStream out(&iniFile);
             out << ui->plainTextEdit->toPlainText();
