@@ -1,10 +1,14 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include "inisyntaxhighlighter.h"
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QFile>
 #include <QDir>
 #include <QTextStream>
+#include <QSyntaxHighlighter>
+#include <QRegularExpression>
+#include <QTextCharFormat>
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -63,30 +67,36 @@ MainWindow::MainWindow(QWidget *parent) :
     // Connecting emulator combo box change to update games list function
     connect(ui->emulatorComboBox, &QComboBox::currentTextChanged, this, &MainWindow::updateGamesList);
 
+    auto *highlighter = new IniSyntaxHighlighter(ui->plainTextEdit->document());
+
     // Load default INI settings into plain text edit box
-    QString defaultIni = "[General]\n"
-                         "MameStart=\"cmo 1 baud=9600_parity=N_data=8_stop=1\", \"cmo 2 baud=9600_parity=N_data=8_stop=1\", cmw 1 S6M1x1x, cmw 2 S6M1x1x\n"
-                         "MameStop=cmw 1 E, cmw 2 E, cmc 1, cmc 2\n"
-                         "StateChange=\n"
-                         "OnRotate=\n"
-                         "OnPause=\n"
-                         "\n[KeyStates]\n"
-                         "RefreshTime=\n"
-                         "\n[Output]\n"
-                         "P1_LmpStart=\n"
-                         "P2_LmpStart=\n"
-                         "P1_Ammo=\n"
-                         "P2_Ammo=\n"
-                         "P1_Clip=\n"
-                         "P2_Clip=\n"
-                         "P1_CtmRecoil=cmw 1 F0x%s%\n"
-                         "P2_CtmRecoil=cmw 2 F0x%s%\n"
-                         "P1_Life=\n"
-                         "P2_Life=\n"
-                         "P1_Damaged=cmw 1 F1x%s%\n"
-                         "P2_Damaged=cmw 2 F1x%s%\n"
-                         "Credits=\n";
+    QString defaultIni = R"([General]
+MameStart = "cmo 1 baud=9600_parity=N_data=8_stop=1", "cmo 2 baud=9600_parity=N_data=8_stop=1", cmw 1 S6M1x1x, cmw 2 S6M1x1x
+MameStop = cmw 1 E, cmw 2 E, cmc 1, cmc 2
+StateChange =
+OnRotate =
+OnPause =
+
+[KeyStates]
+RefreshTime =
+
+[Output]
+P1_LmpStart =
+P2_LmpStart =
+P1_Ammo =
+P2_Ammo =
+P1_Clip =
+P2_Clip =
+P1_CtmRecoil = cmw 1 F0x%s%
+P2_CtmRecoil = cmw 2 F0x%s%
+P1_Life =
+P2_Life =
+P1_Damaged = cmw 1 F1x%s%
+P2_Damaged = cmw 2 F1x%s%
+Credits =
+)";
     ui->plainTextEdit->setPlainText(defaultIni);
+
 }
 
 MainWindow::~MainWindow()
@@ -849,4 +859,43 @@ void MainWindow::updateEmulatorPath()
         ui->emulatorPathLineEdit->setText("Choose path to executable");
     }
 }
+
+IniSyntaxHighlighter::IniSyntaxHighlighter(QTextDocument *parent)
+    : QSyntaxHighlighter(parent)
+{
+    // Section headers: [SectionName]
+    QTextCharFormat sectionFormat;
+    sectionFormat.setForeground(Qt::blue);
+    sectionFormat.setFontWeight(QFont::Bold);
+    highlightingRules.append({QRegularExpression(R"(\[.*\])"), sectionFormat});
+
+    // Keys: KeyName=
+    QTextCharFormat keyFormat;
+    keyFormat.setForeground(Qt::red);
+    sectionFormat.setFontWeight(QFont::Bold);
+    highlightingRules.append({QRegularExpression(R"(^\s*[^=]+(?==))"), keyFormat});
+
+    // Values: =Value
+    QTextCharFormat valueFormat;
+    valueFormat.setForeground(Qt::black);
+    highlightingRules.append({QRegularExpression(R"(=(.*))"), valueFormat});
+
+    // Comments: ; Comment
+    QTextCharFormat commentFormat;
+    commentFormat.setForeground(Qt::gray);
+    commentFormat.setFontItalic(true);
+    highlightingRules.append({QRegularExpression(R"(;.*$)"), commentFormat});
+}
+
+void IniSyntaxHighlighter::highlightBlock(const QString &text)
+{
+    for (const auto &rule : highlightingRules) {
+        QRegularExpressionMatchIterator matchIterator = rule.pattern.globalMatch(text);
+        while (matchIterator.hasNext()) {
+            QRegularExpressionMatch match = matchIterator.next();
+            setFormat(match.capturedStart(), match.capturedLength(), rule.format);
+        }
+    }
+}
+
 
