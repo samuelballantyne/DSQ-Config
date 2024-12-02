@@ -16,6 +16,19 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->emulatorComboBox->addItems({"----DemulShooter----", "Coastal", "Cxbx-Reloaded", "Demul 0.57 / 0.582 / 0.7a", "Demul 0.7a Only", "Demul 0.582 and Above", "Dolphin x64 v5.0", "Namco ES4 Games", "GameWax Games", "Global VR Games", "KONAMI Arcade", "TeknoParrot Loader (Lindbergh)", "Model2 Emulator v1.1a", "P&P Marketing Arcade", "TeknoParrot Loader (Raw Thrill)", "RingEdge 2 Games", "TeknoParrot Loader (RingWide)", "Taito Type X Games", "Windows Games", "----DemulShooter64----", "Adrenaline Amusements", "SEGA Amusement Linkage Live System", "Namco ES3 System", "Flycast v2.0", "RPCS3 System 357", "Sega Nu", "UNIS Technology", "Windows Games (64)"});
     ui->emulatorComboBox->setMaxVisibleItems(50);
 
+    QFont boldFont;
+    boldFont.setBold(true);
+
+    for (int i = 0; i < ui->emulatorComboBox->count(); ++i) {
+        QString itemText = ui->emulatorComboBox->itemText(i);
+        if (itemText == "----DemulShooter----" || itemText == "----DemulShooter64----") {
+            // Set the item to bold
+            ui->emulatorComboBox->setItemData(i, boldFont, Qt::FontRole);
+            // Optionally disable the item
+            ui->emulatorComboBox->setItemData(i, QVariant(0), Qt::UserRole - 1);
+        }
+    }
+
 
     // Connecting emulator combo box change to update games list and path function
     connect(ui->emulatorComboBox, &QComboBox::currentTextChanged, this, &MainWindow::updateGamesList);
@@ -24,7 +37,7 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->verboseComboBox->addItems({"Yes", "No"});
 
     // Disable the ROM combo box until an emulator is selected
-    ui->romComboBox->setEnabled(false);
+    //ui->romComboBox->setEnabled(false);
 
     // Connecting the export button to the export function
     connect(ui->exportButton, &QPushButton::clicked, this, &MainWindow::exportFiles);
@@ -34,7 +47,7 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->emulatorPathLineEdit->setText("C:/Demul/");
     connect(ui->browseEmulatorButton, &QPushButton::clicked, this, &MainWindow::browseEmulatorPath);
 
-    ui->romPathLineEdit->setText("C:/Demul/roms/");
+    ui->romPathLineEdit->setText("C:/roms");
     connect(ui->browseRomButton, &QPushButton::clicked, this, &MainWindow::browseRomPath);
 
     ui->qmamehookerPathLineEdit->setText("C:/QMamehooker");
@@ -794,17 +807,46 @@ void MainWindow::updateEmulatorPath()
         ui->romPathLineEdit->setText("C:/Coastal/roms/");
     } else if (emulator == "Cxbx-Reloaded") {
         ui->emulatorPathLineEdit->setText("C:/Cxbx-Reloaded/chihiro.exe");
-    } else if (emulator == "Demul 0.7a Only") {
-        ui->emulatorPathLineEdit->setText("C:/Demul/demul07a.exe");
+    } else if (emulator == "Demul 0.57 / 0.582 / 0.7a" || emulator == "Demul 0.7a Only" || emulator == "Demul 0.582 and Above") {
+        ui->emulatorPathLineEdit->setText("C:/Demul/demul.exe");
     } else if (emulator == "Dolphin x64 v5.0") {
-        ui->emulatorPathLineEdit->setText("C:/Dolphin/dolphin5.exe");
+        ui->emulatorPathLineEdit->setText("C:/Dolphin/Dolphin.exe");
     } else if (emulator == "Namco ES4 Games") {
         ui->emulatorPathLineEdit->setText("C:/NamcoES4/es4.exe");
+    } else if (emulator == "GameWax Games") {
+        ui->emulatorPathLineEdit->setText("C:/GameWax/GameWax.exe");
+    } else if (emulator == "Global VR Games") {
+        ui->emulatorPathLineEdit->setText("C:/GlobalVR/GlobalVR.exe");
+    } else if (emulator == "KONAMI Arcade") {
+        ui->emulatorPathLineEdit->setText("C:/KONAMI/Arcade.exe");
+    } else if (emulator == "TeknoParrot Loader (Lindbergh)" || emulator == "TeknoParrot Loader (Raw Thrill)" || emulator == "TeknoParrot Loader (RingWide)") {
+        ui->emulatorPathLineEdit->setText("C:/TeknoParrot/TeknoParrotUi.exe");
     } else if (emulator == "Model2 Emulator v1.1a") {
-        ui->emulatorPathLineEdit->setText("C:/Model2Emulator/model2.exe");
+        ui->emulatorPathLineEdit->setText("C:/Model2Emulator/emulator.exe");
+    } else if (emulator == "P&P Marketing Arcade") {
+        ui->emulatorPathLineEdit->setText("C:/PandP/Arcade.exe");
     } else if (emulator == "RingEdge 2 Games") {
         ui->emulatorPathLineEdit->setText("C:/RingEdge2/ringedge2.exe");
+    } else if (emulator == "Taito Type X Games") {
+        ui->emulatorPathLineEdit->setText("C:/TaitoTypeX/typex_loader.exe");
     } else if (emulator == "Windows Games") {
-        ui->emulatorPathLineEdit->setText("C:/WindowsGames/windowsgame.exe");
+        ui->emulatorPathLineEdit->setText("Choose path to executable");
+    } else if (emulator == "Adrenaline Amusements") {
+        ui->emulatorPathLineEdit->setText("C:/Adrenaline/Adrenaline.exe");
+    } else if (emulator == "SEGA Amusement Linkage Live System") {
+        ui->emulatorPathLineEdit->setText("C:/SEGA/AmusementLinkage.exe");
+    } else if (emulator == "Namco ES3 System") {
+        ui->emulatorPathLineEdit->setText("C:/NamcoES3/es3.exe");
+    } else if (emulator == "Flycast v2.0") {
+        ui->emulatorPathLineEdit->setText("C:/Flycast/flycast.exe");
+    } else if (emulator == "RPCS3 System 357") {
+        ui->emulatorPathLineEdit->setText("C:/RPCS3/rpcs3.exe");
+    } else if (emulator == "Sega Nu") {
+        ui->emulatorPathLineEdit->setText("C:/SegaNu/seganu.exe");
+    } else if (emulator == "UNIS Technology") {
+        ui->emulatorPathLineEdit->setText("C:/UNIS/UNIS.exe");
+    } else if (emulator == "Windows Games (64)") {
+        ui->emulatorPathLineEdit->setText("Choose path to executable");
     }
 }
+
