@@ -54,10 +54,6 @@ DemulEasy is a straightforward, automated tool designed to simplify the configur
 - **Enhanced Features:**  
   Based on user feedback, future updates may include more advanced customization options and additional functionalities.
 
-## License
-
-This project is open source and licensed under the [MIT License](LICENSE).
-
 ## Contributing
 
 Contributions are welcome! If you’d like to improve DemulEasy, please feel free to fork the repository and submit a pull request. Check out the [CONTRIBUTING.md](CONTRIBUTING.md) file for our guidelines.
