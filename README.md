@@ -1,4 +1,4 @@
-# DemulEasy
+# DSQ Config
 
 DemulEasy is a straightforward, automated tool designed to simplify the configuration process for QMamehook and Demul Shooter on Windows. With an easy-to-use GUI, this tool lets you quickly set up emulator and game folder locations, adjust ini settings, and export the necessary bat and ini files—all in one go.
 
@@ -41,9 +41,9 @@ DemulEasy is a straightforward, automated tool designed to simplify the configur
    - **QMamehook Path:** Set the path for QMamehook.
 
 3. **Adjust ini Settings:**  
-   Use the provided text box to modify configuration settings as needed.
-
-4. **Export Files:**  
+   Use the provided text box to modify QMamehooks ini settings as needed. These will vary slightly from gun to gun but for OpenFIRE specifically here's a list of serial commands [MAMEHOOKER Documentation on Light Gun Serial Commands](https://github.com/TeamOpenFIRE/OpenFIRE-Firmware/wiki/MAMEHOOKER-Documentation#light-gun-serial-commands)
+   
+5. **Export Files:**  
    Click the export button to generate the bat and ini files, which will be saved to their respective folders.
 
 ## Future Plans
@@ -56,11 +56,11 @@ DemulEasy is a straightforward, automated tool designed to simplify the configur
 
 ## Contributing
 
-Contributions are welcome! If you’d like to improve DemulEasy, please feel free to fork the repository and submit a pull request. Check out the [CONTRIBUTING.md](CONTRIBUTING.md) file for our guidelines.
+Contributions are welcome! If you’d like to improve DemulEasy, please feel free to fork the repository and submit a pull request.
 
 ## Contact
 
-If you have any issues, suggestions, or questions, please open an issue on GitHub or get in touch directly.
+If you have any issues, suggestions, or questions, please open an issue on GitHub
 
 ---
 
