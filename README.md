@@ -43,8 +43,11 @@ DemulEasy is a straightforward, automated tool designed to simplify the configur
 3. **Adjust ini Settings:**  
    Use the provided text box to modify QMamehooks ini settings as needed. These will vary slightly from gun to gun but for OpenFIRE specifically here's a list of serial commands [MAMEHOOKER Documentation on Light Gun Serial Commands](https://github.com/TeamOpenFIRE/OpenFIRE-Firmware/wiki/MAMEHOOKER-Documentation#light-gun-serial-commands)
    
-5. **Export Files:**  
+5. **Export Files:**
    Click the export button to generate the bat and ini files, which will be saved to their respective folders.
+
+6. **Launch the Game:**
+   The launch button re-uses the same export logic and automatically starts the generated batch file if the export succeeds.
 
 ## Future Plans
 
@@ -53,6 +56,29 @@ DemulEasy is a straightforward, automated tool designed to simplify the configur
 
 - **Enhanced Features:**  
   Based on user feedback, future updates may include more advanced customization options and additional functionalities.
+
+## Continuous Integration
+
+A GitHub Actions workflow builds the project on Windows and packages the executable with its required Qt libraries. The workflow uploads a zipped artifact for download.
+
+## Building from Source
+
+To build the application locally, install the Qt 6 development libraries and point CMake to the Qt package directory, for example:
+
+```powershell
+cmake -S . -B build -DQt6_DIR="C:/Qt/6.5.3/msvc2019_64/lib/cmake/Qt6"
+cmake --build build
+```
+
+Adjust the path to match your Qt installation. On macOS or Linux, use the appropriate Qt package path instead.
+
+## Running Tests
+
+After configuring the project, run the Python test suite to verify export and launch logic:
+
+```bash
+pytest
+```
 
 ## Contributing
 
