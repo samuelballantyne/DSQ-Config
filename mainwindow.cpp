@@ -2027,6 +2027,8 @@ void MainWindow::launchGame()
 {
     // First export the files
     if (!exportFiles(false)) {
+        QMessageBox::warning(this, "Export Error",
+                             "Failed to export files; game launch aborted.");
         qWarning() << "Export failed; game launch aborted.";
         return;
     }
