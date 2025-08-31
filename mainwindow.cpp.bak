@@ -1,0 +1,2158 @@
+#include "mainwindow.h"
+#include "ui_mainwindow.h"
+#include "IniSyntaxHighlighter.h" // Fixed case sensitivity
+#include "emulatorutils.h"
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QFile>
+#include <QFileInfo>
+#include <QTextStream>
+#include <QDebug>
+#include <QFont>
+#include <QSyntaxHighlighter>
+#include <QRegularExpression>
+#include <QTextCharFormat>
+#include <QPixmap>
+#include <QIcon>
+#include <QVariant>
+
+// Global color definitions.
+QColor customRed(255, 0, 0);      // Red using RGB values
+QColor customGreen(0, 255, 0);      // Green using RGB values
+QColor customBlue(0, 0, 255);       // Blue using RGB values
+QColor customYellow(255, 255, 0);   // Yellow using RGB values
+
+// Define static regex patterns.
+const QRegularExpression MainWindow::recoilRegex(
+    QRegularExpression(R"(^P1_CtmRecoil[ \t]*=[ \t]*cmw[ \t]*1[ \t]*(.*?)[ \t]*(?=\r?\n|$))", QRegularExpression::MultilineOption)
+);
+const QRegularExpression MainWindow::damageRegex(
+    QRegularExpression(R"(^P1_Damage[ \t]*=[ \t]*cmw[ \t]*1[ \t]*(.*?)[ \t]*(?=\r?\n|$))", QRegularExpression::MultilineOption)
+);
+const QRegularExpression MainWindow::clipRegex(
+    QRegularExpression(R"(^P1_Clip[ \t]*=[ \t]*cmw[ \t]*1[ \t]*(.*?)[ \t]*(?=\r?\n|$))", QRegularExpression::MultilineOption)
+);
+const QRegularExpression MainWindow::ammoRegex(
+    QRegularExpression(R"(^P1_Ammo[ \t]*=[ \t]*(?:cmw[ \t]*1[ \t]*(.*?)[ \t]*(?=\r?\n|$)|[ \t]*(?=\r?\n|$)))", QRegularExpression::MultilineOption)
+);
+const QRegularExpression MainWindow::lifeRegex(
+    QRegularExpression(R"(^P1_Life[ \t]*=[ \t]*(?:cmw[ \t]*1[ \t]*(.*?)[ \t]*(?=\r?\n|$)|[ \t]*(?=\r?\n|$)))", QRegularExpression::MultilineOption)
+);
+const QRegularExpression MainWindow::creditsRegex(
+    QRegularExpression(R"(^Credits[ \t]*=[ \t]*(?:cmw[ \t]*1[ \t]*(.*?)[ \t]*(?=\r?\n|$)|[ \t]*(?=\r?\n|$)))", QRegularExpression::MultilineOption)
+);
+
+//
+// MainWindow Constructor & Destructor
+//
+MainWindow::MainWindow(QWidget *parent) :
+    QMainWindow(parent),
+    ui(new Ui::MainWindow)
+{
+    ui->setupUi(this);
+
+    initializeUI();
+    
+    // Initialize the syntax highlighter for the plain text edit.
+    new IniSyntaxHighlighter(ui->plainTextEdit_Generic->document());
+    
+    // Set platform-appropriate default paths
+    #ifdef Q_OS_WIN
+    ui->qmamehookerPathLineEdit->setText("C:/QMamehook");
+    ui->demulShooterPathLineEdit->setText("C:/DemulShooter");
+    #else
+    ui->qmamehookerPathLineEdit->setText(QDir::homePath() + "/QMamehook");
+    ui->demulShooterPathLineEdit->setText(QDir::homePath() + "/DemulShooter");
+    #endif
+}
+
+MainWindow::~MainWindow()
+{
+    delete ui;
+}
+
+///
+/// Initialization helper – sets up UI elements, styles, and connects signals.
+///
+void MainWindow::initializeUI() {
+    setupEmulatorComboBox();
+    setupComboBoxStyles();
+    setupOtherUIFields();
+    setupColorComboBoxes();
+    setupSignalConnections();
+    setupDefaultIni();
+}
+
+///
+/// Sets up the emulator combo box with items and the max visible items.
+///
+void MainWindow::setupEmulatorComboBox() {
+    ui->emulatorComboBox->addItems({
+        "----DemulShooter----", "Coastal", "Cxbx-Reloaded", "Demul 0.57 / 0.582 / 0.7a", "Demul 0.582 and Above",
+        "Demul 0.7a Only", "Dolphin x64 v5.0", "GameWax Games", "Global VR Games", "KONAMI Arcade",
+        "Model2 Emulator v1.1a", "Namco ES4 Games", "P&P Marketing Arcade", "RingEdge 2 Games", "Taito Type X Games",
+        "TeknoParrot Loader (Lindbergh)", "TeknoParrot Loader (Raw Thrill)", "TeknoParrot Loader (RingWide)",
+        "Windows Games", "----DemulShooter64----", "Adrenaline Amusements", "Flycast v2.0", "Namco ES3 System",
+        "RPCS3 System 357", "SEGA Amusement Linkage Live System", "Sega Nu", "UNIS Technology", "Windows Games (64)"
+    });
+    ui->emulatorComboBox->setMaxVisibleItems(50);
+}
+
+///
+/// Applies bold styling to divider items in the emulator combo box and optionally disables selection.
+///
+void MainWindow::setupComboBoxStyles() {
+    QFont boldFont;
+    boldFont.setBold(true);
+    for (int i = 0; i < ui->emulatorComboBox->count(); ++i) {
+        QString itemText = ui->emulatorComboBox->itemText(i);
+        if (itemText == "----DemulShooter----" || itemText == "----DemulShooter64----") {
+            ui->emulatorComboBox->setItemData(i, boldFont, Qt::FontRole);
+            ui->emulatorComboBox->setItemData(i, QVariant(0), Qt::UserRole - 1);
+        }
+    }
+}
+
+///
+/// Sets default text and items for various UI fields.
+///
+void MainWindow::setupOtherUIFields() {
+    // Basic fields.
+    ui->verboseComboBox->addItems({"Yes", "No"});
+    ui->emulatorPathLineEdit->setText("Choose Path the Emulator executable");
+    ui->romPathLineEdit->setText("C:/roms");
+    ui->qmamehookerPathLineEdit->setText("C:/QMamehook");
+    ui->demulShooterPathLineEdit->setText("C:/DemulShooter");
+
+    // LED color combo boxes – add a placeholder.
+    ui->P1Color->addItem("X");
+    ui->P2Color->addItem("X");
+    ui->P3Color->addItem("X");
+    ui->P4Color->addItem("X");
+
+    // Start command combo box.
+    ui->StartCommands->addItems({
+        "S0 - Start with solenoid enabled",
+        "S1 - Start with rumble enabled",
+        "S2 - Start with the RED LED enabled",
+        "S3 - Start with the GREEN LED enabled",
+        "S4 - Start with the BLUE LED enabled",
+        "S6 - Start with everything enabled"
+    });
+    ui->StartCommands->setCurrentIndex(5);
+
+    // Other combo boxes.
+    ui->DeviceOutputMode->addItems({
+        "------", "M0x0 - Mouse & Keyboard", "M0x1 - Gamepad, w/ Camera mapped to Right Stick",
+        "M0x1L - Maps Camera to Left Stick instead (OpenFIRE exclusive)", "M0x2 - 'Hybrid'"
+    });
+    ui->OffscreenFiringMode->addItems({
+        "------", "M1x0 - Disabled (not used in OpenFIRE)", "M1x1 - Fire in bottom-left corner (not used in OpenFIRE)",
+        "M1x2 - Offscreen Button Mode enabled (i.e. offscreen trigger pulls generates a Right Click instead of a Left Click)",
+        "M1x3 - Normal shot (always on when Offscreen Button Mode isn't set in OpenFIRE)"
+    });
+    ui->OffscreenFiringMode->setItemData(1, QVariant(0), Qt::UserRole - 1);
+    ui->OffscreenFiringMode->setItemData(2, QVariant(0), Qt::UserRole - 1);
+
+    ui->PedalMapping->addItems({
+        "------", "M1x0 - Disabled (not used in OpenFIRE)", "M1x1 - Fire in bottom-left corner (not used in OpenFIRE)",
+        "M2x0 - Separate Button (as mapped)", "M2x1 - As Right Mouse", "M2x2 - As Middle Mouse (OpenFIRE exclusive)"
+    });
+    ui->PedalMapping->setItemData(1, QVariant(0), Qt::UserRole - 1);
+    ui->PedalMapping->setItemData(2, QVariant(0), Qt::UserRole - 1);
+
+    ui->AspectRatioCorrection->addItems({"------", "M3x0 - Fullscreen", "M3x1 - 4:3 Correction"});
+    ui->RumbleOnlyMode->addItems({"------", "M6x0 - Disabled (Solenoid allowed)", "M6x1 - Enabled (Solenoid disabled, Rumble enabled)"});
+    ui->AutoFireMode->addItems({"------", "M8x0 - Disabled (sustained fire is kept enabled in OpenFIRE)", "M8x1 - Auto fire on (enables Burst Fire in OpenFIRE)", "M8x2 - Auto fire always on rapid fire"});
+    ui->DisplayMode->addItems({"------", "MDx1 - Life Only", "MDx2 - Ammo Only", "MDx3 - Life & Ammo Splitscreen", "MDx3B - Life Bar (Life Glyphs otherwise)"});
+    ui->Recoil->addItems({"------", "Solenoid Single Pulse (recommended)", "Solenoid Switching", "Rumble Single Pulse (recommended for rumble)", "Rumble Switching", "Custom"});
+    ui->Damage->addItems({"------", "Rumble Single Pulse (recommended)", "Rumble Switching", "Custom"});
+    ui->Clip->addItems({"------", "Red/Off", "Red/White", "White/Off", "Custom"});
+    ui->Ammo->addItems({"------", "OLED On", "Custom"});
+    ui->Life->addItems({"------", "OLED On", "Custom"});
+    ui->Credits->addItems({"------", "OLED On (coming soon)", "Custom"});
+
+    ui->P1Color->setCurrentIndex(1);
+    ui->P2Color->setCurrentIndex(2);
+    ui->P3Color->setCurrentIndex(3);
+    ui->P4Color->setCurrentIndex(4);
+}
+
+///
+/// Populates the LED color combo boxes with color icons and stores the QColor data.
+///
+void MainWindow::setupColorComboBoxes() {
+    QList<QColor> colors = {
+        QColor(255, 0, 0), QColor(0, 0, 255), QColor(0, 255, 0),
+        QColor(255, 150, 0), QColor(255, 255, 0), QColor(255, 255, 255),
+        QColor(0, 255, 255), QColor(255, 0, 255)
+    };
+
+    for (const QColor &color : colors) {
+        QPixmap pixmap(20, 20);
+        pixmap.fill(color);
+        QIcon icon(pixmap);
+        // Add icon with a blank text and store the color as userData.
+        ui->P1Color->addItem(icon, " ", color);
+        ui->P2Color->addItem(icon, " ", color);
+        ui->P3Color->addItem(icon, " ", color);
+        ui->P4Color->addItem(icon, " ", color);
+    }
+}
+
+///
+/// Connects signals to slots for the UI elements.
+///
+void MainWindow::setupSignalConnections() {
+    // Emulator combo box signals.
+    connect(ui->emulatorComboBox, &QComboBox::currentTextChanged, this, &MainWindow::updateGamesList);
+    connect(ui->emulatorComboBox, &QComboBox::currentTextChanged, this, &MainWindow::updateEmulatorPath);
+
+    // Export button signals.
+    connect(ui->exportButton, &QPushButton::clicked, this, &MainWindow::exportFiles);
+    connect(ui->exportAllButton, &QPushButton::clicked, this, &MainWindow::exportAllFiles);
+
+    // Browse button signals.
+    connect(ui->browseEmulatorButton, &QPushButton::clicked, this, &MainWindow::browseEmulatorPath);
+    connect(ui->browseRomButton, &QPushButton::clicked, this, &MainWindow::browseRomPath);
+    connect(ui->browseQmamehookerButton, &QPushButton::clicked, this, &MainWindow::browseQmamehookerPath);
+    connect(ui->browseDemulButton, &QPushButton::clicked, this, &MainWindow::browseDemulPath);
+
+    // INI update signals for various combo boxes.
+    connect(ui->StartCommands, &QComboBox::currentTextChanged, this, &MainWindow::updateIniText);
+    connect(ui->DeviceOutputMode, &QComboBox::currentTextChanged, this, &MainWindow::updateIniText);
+    connect(ui->OffscreenFiringMode, &QComboBox::currentTextChanged, this, &MainWindow::updateIniText);
+    connect(ui->PedalMapping, &QComboBox::currentTextChanged, this, &MainWindow::updateIniText);
+    connect(ui->AspectRatioCorrection, &QComboBox::currentTextChanged, this, &MainWindow::updateIniText);
+    connect(ui->RumbleOnlyMode, &QComboBox::currentTextChanged, this, &MainWindow::updateIniText);
+    connect(ui->AutoFireMode, &QComboBox::currentTextChanged, this, &MainWindow::updateIniText);
+    connect(ui->DisplayMode, &QComboBox::currentTextChanged, this, &MainWindow::updateIniText);
+    connect(ui->P1Color, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::updateIniText);
+    connect(ui->P2Color, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::updateIniText);
+    connect(ui->P3Color, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::updateIniText);
+    connect(ui->P4Color, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::updateIniText);
+
+    // Parameter combo box and text field connections.
+    connect(ui->Recoil, &QComboBox::currentTextChanged, this, [this](const QString &text) {
+        if (text == "------") ui->Recoil_Text->setPlainText("");
+        else if (text == "Solenoid Single Pulse (recommended)") ui->Recoil_Text->setPlainText("F0x2x1");
+        else if (text == "Solenoid Switching") ui->Recoil_Text->setPlainText("F0x%s%");
+        else if (text == "Rumble Single Pulse (recommended for rumble)") ui->Recoil_Text->setPlainText("F1x2x1");
+        else if (text == "Rumble Switching") ui->Recoil_Text->setPlainText("F1x%s%");
+    });
+    connect(ui->Damage, &QComboBox::currentTextChanged, this, [this](const QString &text) {
+        if (text == "------") ui->Damage_Text->setPlainText("");
+        else if (text == "Rumble Single Pulse (recommended)") ui->Damage_Text->setPlainText("F1x2x1");
+        else if (text == "Rumble Switching") ui->Damage_Text->setPlainText("F1x%s%");
+    });
+    connect(ui->Clip, &QComboBox::currentTextChanged, this, [this](const QString &text) {
+        if (text == "------") ui->Clip_Text->setPlainText("");
+        else if (text == "Red/Off" || text == "Red/White" || text == "White/Off") ui->Clip_Text->setPlainText("XX");
+    });
+    connect(ui->Ammo, &QComboBox::currentTextChanged, this, [this](const QString &text) {
+        if (text == "------") ui->Ammo_Text->setPlainText("");
+        else if (text == "OLED On") ui->Ammo_Text->setPlainText("DFAx%s%");
+    });
+    connect(ui->Life, &QComboBox::currentTextChanged, this, [this](const QString &text) {
+        if (text == "------") ui->Life_Text->setPlainText("");
+        else if (text == "OLED On") ui->Life_Text->setPlainText("XX");
+    });
+    connect(ui->Credits, &QComboBox::currentTextChanged, this, [this](const QString &text) {
+        if (text == "------") ui->Credits_Text->setPlainText("");
+        else if (text == "OLED On (coming soon)") ui->Credits_Text->setPlainText("XX");
+    });
+    connect(ui->Custom1, &QComboBox::currentTextChanged, this, [this](const QString &text) {
+        ui->Custom1_Text->setPlainText(text == "------" ? "" : "XX");
+    });
+    connect(ui->Custom2, &QComboBox::currentTextChanged, this, [this](const QString &text) {
+        ui->Custom2_Text->setPlainText(text == "------" ? "" : "XX");
+    });
+    connect(ui->Custom3, &QComboBox::currentTextChanged, this, [this](const QString &text) {
+        ui->Custom3_Text->setPlainText(text == "------" ? "" : "XX");
+    });
+
+    // TextEdit changes updating combo boxes and INI text.
+    connect(ui->Recoil_Text, &QTextEdit::textChanged, this, [this]() {
+        QString text = ui->Recoil_Text->toPlainText().trimmed();
+        if (text.isEmpty()) ui->Recoil->setCurrentText("------");
+        else if (text == "F0x2x1") ui->Recoil->setCurrentText("Solenoid Single Pulse (recommended)");
+        else if (text == "F0x%s%") ui->Recoil->setCurrentText("Solenoid Switching");
+        else if (text == "F1x2x1") ui->Recoil->setCurrentText("Rumble Single Pulse (recommended for rumble)");
+        else if (text == "F1x%s%") ui->Recoil->setCurrentText("Rumble Switching");
+        else ui->Recoil->setCurrentText("Custom");
+        updateIniText();
+    });
+    connect(ui->Damage_Text, &QTextEdit::textChanged, this, [this]() {
+        QString text = ui->Damage_Text->toPlainText().trimmed();
+        if (text == "F1x2x1") ui->Damage->setCurrentText("Rumble Single Pulse (recommended)");
+        else if (text == "F1x%s%") ui->Damage->setCurrentText("Rumble Switching");
+        else if (text.isEmpty()) ui->Damage->setCurrentText("------");
+        else ui->Damage->setCurrentText("Custom");
+        updateIniText();
+    });
+    connect(ui->Clip_Text, &QTextEdit::textChanged, this, [this]() {
+        QString text = ui->Clip_Text->toPlainText().trimmed();
+        if (text == "XX" && ui->Clip->currentText() == "------") ui->Clip->setCurrentText("Red/Off");
+        else if (text.isEmpty()) ui->Clip->setCurrentText("------");
+        else ui->Clip->setCurrentText("Custom");
+        updateIniText();
+    });
+    connect(ui->Ammo_Text, &QTextEdit::textChanged, this, [this]() {
+        QString text = ui->Ammo_Text->toPlainText().trimmed();
+        if (text == "DFAx%s%") ui->Ammo->setCurrentText("OLED On");
+        else if (text.isEmpty()) ui->Ammo->setCurrentText("------");
+        else ui->Ammo->setCurrentText("Custom");
+        updateIniText();
+    });
+    connect(ui->Life_Text, &QTextEdit::textChanged, this, [this]() {
+        QString text = ui->Life_Text->toPlainText().trimmed();
+        if (text == "XX") ui->Life->setCurrentText("OLED On");
+        else if (text.isEmpty()) ui->Life->setCurrentText("------");
+        else ui->Life->setCurrentText("Custom");
+        updateIniText();
+    });
+    connect(ui->Credits_Text, &QTextEdit::textChanged, this, [this]() {
+        QString text = ui->Credits_Text->toPlainText().trimmed();
+        if (text == "XX") ui->Credits->setCurrentText("OLED On (coming soon)");
+        else if (text.isEmpty()) ui->Credits->setCurrentText("------");
+        else ui->Credits->setCurrentText("Custom");
+        updateIniText();
+    });
+
+    // Connect the refresh INI button using findChild to avoid linter errors
+    QPushButton* refreshButton = findChild<QPushButton*>("refreshIniButton");
+    if (refreshButton) {
+        connect(refreshButton, &QPushButton::clicked, this, &MainWindow::refreshIni);
+    } else {
+        qWarning() << "Could not find refreshIniButton in the UI";
+    }
+}
+
+///
+/// Loads the default INI template into the plain text edit.
+///
+void MainWindow::setupDefaultIni() {
+    // Clear the text editor instead of setting a default INI
+    ui->plainTextEdit_Generic->clear();
+    
+    // Reset the loaded flag
+    originalIniContent = "";
+    hasLoadedIni = false;
+    
+    // By default, only enable Player 1 controls
+    // Other players will be enabled when we detect them in an INI file
+    ui->P1Color->setEnabled(true);
+    ui->P2Color->setEnabled(false);
+    ui->P3Color->setEnabled(false);
+    ui->P4Color->setEnabled(false);
+    
+    // Hide custom fields by default - they will be shown if detected in INI
+    ui->lineEdit->setVisible(false);
+    ui->Custom1->setVisible(false);
+    ui->Custom1_Text->setVisible(false);
+    
+    ui->lineEdit_2->setVisible(false);
+    ui->Custom2->setVisible(false);
+    ui->Custom2_Text->setVisible(false);
+    
+    ui->lineEdit_3->setVisible(false);
+    ui->Custom3->setVisible(false);
+    ui->Custom3_Text->setVisible(false);
+    
+    // Reset custom field labels
+    ui->lineEdit->setText("Custom 1.");
+    ui->lineEdit_2->setText("Custom 2.");
+    ui->lineEdit_3->setText("Custom 3.");
+    
+    // Make sure all standard controls are visible by default
+    // They will be hidden if not found in the INI file
+    ui->Recoil->setVisible(true);
+    ui->Recoil_Text->setVisible(true);
+    ui->label_OpenFIRE_LmpStart_8->setVisible(true);
+    
+    ui->Damage->setVisible(true);
+    ui->Damage_Text->setVisible(true);
+    ui->label_OpenFIRE_LmpStart_10->setVisible(true);
+    
+    ui->Clip->setVisible(true);
+    ui->Clip_Text->setVisible(true);
+    ui->label_OpenFIRE_LmpStart_7->setVisible(true);
+    
+    ui->Ammo->setVisible(true);
+    ui->Ammo_Text->setVisible(true);
+    ui->label_OpenFIRE_LmpStart_2->setVisible(true);
+    
+    ui->Life->setVisible(true);
+    ui->Life_Text->setVisible(true);
+    ui->label_OpenFIRE_LmpStart_9->setVisible(true);
+    
+    ui->Credits->setVisible(true);
+    ui->Credits_Text->setVisible(true);
+    ui->label_OpenFIRE_LmpStart_17->setVisible(true);
+}
+
+// ---------------------- Other Methods (unchanged logic) ---------------------- //
+
+void MainWindow::prepareDirectories(const QString &basePath, QDir &iniDir, QDir &batDir)
+{
+    // Create an absolute path using QDir to ensure platform compatibility
+    QDir baseDir(basePath);
+    
+    // Make sure base directory exists
+    if (!baseDir.exists()) {
+        if (!baseDir.mkpath(".")) {
+            qWarning() << "Failed to create base directory:" << basePath;
+            return;
+        }
+    }
+    
+    QString iniDirPath = basePath + "/ini";
+    QString batDirPath = basePath + "/bat";
+    
+    iniDir = QDir(iniDirPath);
+    batDir = QDir(batDirPath);
+
+    if (!iniDir.exists()) {
+        if (!iniDir.mkpath(".")) {
+            qWarning() << "Failed to create 'ini' directory:" << iniDirPath;
+        } else {
+            qDebug() << "'ini' directory is ready:" << iniDir.absolutePath();
+        }
+    } else {
+        qDebug() << "'ini' directory is ready:" << iniDir.absolutePath();
+    }
+
+    if (!batDir.exists()) {
+        if (!batDir.mkpath(".")) {
+            qWarning() << "Failed to create 'bat' directory:" << batDirPath;
+        } else {
+            qDebug() << "'bat' directory is ready:" << batDir.absolutePath();
+        }
+    } else {
+        qDebug() << "'bat' directory is ready:" << batDir.absolutePath();
+    }
+}
+
+void MainWindow::mapEmulator(QString &emulator, QString &demulShooterExe)
+{
+    // Use the utility class to handle emulator mapping
+    EmulatorUtils::mapEmulator(emulator, demulShooterExe);
+}
+
+QString MainWindow::mapRom(const QString &rom)
+{
+    // Use the utility class to handle ROM mapping
+    return EmulatorUtils::mapRom(rom);
+}
+
+void MainWindow::createFiles(const QString &rom,
+                             const QString &emulatorInput,
+                             QString demulShooterExeInput,
+                             const QString &emulatorPath,
+                             const QString &romPath,
+                             const QString &qmamehookerPath,
+                             const QString &demulShooterPath,
+                             const QString &verbose,
+                             const QString &iniContent)
+{
+    // Mapping and file creation logic remains unchanged.
+    QString emulator = emulatorInput;
+    QString demulShooterExe = demulShooterExeInput;
+    EmulatorUtils::mapEmulator(emulator, demulShooterExe);
+
+    QString rom2 = EmulatorUtils::mapRom(rom);
+    
+    // Log the ROM mapping for debugging
+    qDebug() << "ROM mapping:" << rom << "->" << rom2;
+
+    QDir iniDir, batDir;
+    prepareDirectories(qmamehookerPath, iniDir, batDir);
+    
+    // Use QDir to ensure platform-independent path handling
+    QString iniDirPath = iniDir.absolutePath();
+    QString batDirPath = batDir.absolutePath();
+
+    QFileInfo emulatorFileInfo(emulatorPath);
+    QString emulatorDirectory = emulatorFileInfo.absolutePath();
+    QString emulatorExecutable = emulatorFileInfo.fileName();
+
+    // Create the BAT file with platform-independent path handling
+    QString batFilePath = batDir.filePath(rom + ".bat");
+    QFile batFile(batFilePath);
+    
+    if (batFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&batFile);
+        
+        // On Windows, use start commands
+        #ifdef Q_OS_WIN
+        out << "start \"Demul\" \"" << QDir::toNativeSeparators(demulShooterPath + "/" + demulShooterExe)
+            << "\" -target=" << emulator
+            << " -rom=" << rom2 << "\n";
+        out << "start /MIN \"Hooker\" \"" << QDir::toNativeSeparators(qmamehookerPath + "/QMamehook.exe")
+            << "\" -p \"" << QDir::toNativeSeparators(iniDirPath) << "\" " << verbose << " -c \n";
+        out << "cd \"" << QDir::toNativeSeparators(emulatorDirectory) << "\"\n";
+        
+        if (emulator == "flycast") {
+            out << "start \"" << emulator << "\" " << emulatorExecutable
+                << " -config window:fullscreen=yes \"" << QDir::toNativeSeparators(romPath + "/" + rom2 + ".zip") << "\"";
+        } else if (emulator == "lindbergh" || emulator == "ringwide" || emulator == "rawthrill") {
+            out << "start \"" << emulator << "\" " << emulatorExecutable << " --profile=" << rom2 + ".xml";
+        } else {
+            out << "start \"" << emulator << "\" " << emulatorExecutable << " " << rom2;
+        }
+        #else
+        // On macOS/Linux, create shell script
+        out << "#!/bin/bash\n\n";
+        out << "# This is a shell script equivalent of a Windows batch file\n";
+        out << "# You'll need to adapt it for your specific macOS/Linux setup\n\n";
+        
+        out << "# Launch DemulShooter\n";
+        out << "\"" << demulShooterPath << "/" << demulShooterExe << "\" -target=" << emulator << " -rom=" << rom2 << " &\n\n";
+        
+        out << "# Launch QMamehook\n";
+        out << "\"" << qmamehookerPath << "/QMamehook\" -p \"" << iniDirPath << "\" " << verbose << " -c &\n\n";
+        
+        out << "# Change to emulator directory\n";
+        out << "cd \"" << emulatorDirectory << "\"\n\n";
+        
+        out << "# Launch emulator\n";
+        if (emulator == "flycast") {
+            out << "\"" << emulatorExecutable << "\" -config window:fullscreen=yes \"" << romPath << "/" << rom2 << ".zip\" &\n";
+        } else if (emulator == "lindbergh" || emulator == "ringwide" || emulator == "rawthrill") {
+            out << "\"" << emulatorExecutable << "\" --profile=" << rom2 << ".xml &\n";
+        } else {
+            out << "\"" << emulatorExecutable << "\" " << rom2 << " &\n";
+        }
+        #endif
+        
+        batFile.close();
+        qDebug() << "Batch file created at:" << batFilePath;
+    } else {
+        qWarning() << "Failed to create batch file at:" << batFilePath;
+    }
+
+    // Create the INI file with platform-independent path handling
+    QString iniFilePath = iniDir.filePath(rom2 + ".ini");
+    QFile iniFile(iniFilePath);
+    
+    if (iniFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&iniFile);
+        out << iniContent;
+        iniFile.close();
+        qDebug() << "INI file created at:" << iniFilePath;
+    } else {
+        qWarning() << "Failed to create INI file at:" << iniFilePath;
+    }
+}
+
+void MainWindow::exportFiles()
+{
+    QString emulator = ui->emulatorComboBox->currentText();
+    QString emulatorPath = ui->emulatorPathLineEdit->text();
+    QString rom = ui->romComboBox->currentText();
+    QString romPath = ui->romPathLineEdit->text();
+    QString qmamehookerPath = ui->qmamehookerPathLineEdit->text();
+    QString demulShooterPath = ui->demulShooterPathLineEdit->text();
+    QString verbose = (ui->verboseComboBox->currentText() == "Yes") ? "-v" : "";
+    QString iniContent = ui->plainTextEdit_Generic->toPlainText();
+    
+    // Check for Windows paths on non-Windows platforms
+    #ifndef Q_OS_WIN
+    if (qmamehookerPath.startsWith("C:/") || qmamehookerPath.startsWith("C:\\")) {
+        QMessageBox::warning(this, "Path Warning",
+                            "You're using Windows-style paths (C:/) on a non-Windows system.\n"
+                            "Please use paths appropriate for your operating system.");
+        return;
+    }
+    #endif
+    
+    createFiles(rom, emulator, QString(), emulatorPath, romPath, qmamehookerPath, demulShooterPath, verbose, iniContent);
+    QMessageBox::information(this, "Export", "Batch and INI files have been successfully exported.");
+}
+
+void MainWindow::exportAllFiles()
+{
+    QString emulator = ui->emulatorComboBox->currentText();
+    QString emulatorPath = ui->emulatorPathLineEdit->text();
+    QString romPath = ui->romPathLineEdit->text();
+    QString qmamehookerPath = ui->qmamehookerPathLineEdit->text();
+    QString demulShooterPath = ui->demulShooterPathLineEdit->text();
+    QString verbose = (ui->verboseComboBox->currentText() == "Yes") ? "-v" : "";
+    QString iniContent = ui->plainTextEdit_Generic->toPlainText();
+    
+    // Check for Windows paths on non-Windows platforms
+    #ifndef Q_OS_WIN
+    if (qmamehookerPath.startsWith("C:/") || qmamehookerPath.startsWith("C:\\")) {
+        QMessageBox::warning(this, "Path Warning",
+                            "You're using Windows-style paths (C:/) on a non-Windows system.\n"
+                            "Please use paths appropriate for your operating system.");
+        return;
+    }
+    #endif
+
+    for (int i = 0; i < ui->romComboBox->count(); ++i) {
+        QString rom = ui->romComboBox->itemText(i);
+        createFiles(rom, emulator, QString(), emulatorPath, romPath, qmamehookerPath, demulShooterPath, verbose, iniContent);
+    }
+    QMessageBox::information(this, "Export", "A full set of Batch and INI files have been successfully exported.");
+}
+
+void MainWindow::updateGamesList()
+{
+    QString emulator = ui->emulatorComboBox->currentText();
+    ui->romComboBox->clear();
+    ui->romComboBox->setEnabled(true);
+
+    // Reset loaded INI state when changing emulators
+    originalIniContent = "";
+    hasLoadedIni = false;
+    ui->plainTextEdit_Generic->clear();
+    
+    // Set player controls (only Player 1 enabled by default)
+    ui->P1Color->setEnabled(true);
+    ui->P2Color->setEnabled(false);
+    ui->P3Color->setEnabled(false);
+    ui->P4Color->setEnabled(false);
+
+    disconnect(ui->romComboBox, QOverload<const QString &>::of(&QComboBox::currentTextChanged),
+               this, &MainWindow::loadIniSettings);
+
+    // Use the utility class to populate the ROM combo box
+    EmulatorUtils::updateGamesList(emulator, ui->romComboBox);
+
+    connect(ui->romComboBox, QOverload<const QString &>::of(&QComboBox::currentTextChanged),
+            this, &MainWindow::loadIniSettings);
+}
+
+#include <QDebug>  // Ensure this is included at the top
+
+void MainWindow::browseQmamehookerPath()
+{
+    qDebug() << "browseQmamehookerPath triggered";
+    QString dir = QFileDialog::getExistingDirectory(this, tr("Select QMamehooker Directory"), ui->qmamehookerPathLineEdit->text(), QFileDialog::DontUseNativeDialog);
+    if (!dir.isEmpty()) {
+        ui->qmamehookerPathLineEdit->setText(dir);
+    }
+}
+
+void MainWindow::browseEmulatorPath()
+{
+    qDebug() << "browseEmulatorPath triggered";
+    QString file = QFileDialog::getOpenFileName(this, tr("Select Emulator Executable"), ui->emulatorPathLineEdit->text(), tr("Executables (*.exe);;All Files (*)"), nullptr, QFileDialog::DontUseNativeDialog);
+    if (!file.isEmpty()) {
+        ui->emulatorPathLineEdit->setText(file);
+    }
+}
+
+void MainWindow::browseRomPath()
+{
+    qDebug() << "browseRomPath triggered";
+    QString dir = QFileDialog::getExistingDirectory(this, tr("Select ROM Directory"), ui->romPathLineEdit->text(), QFileDialog::DontUseNativeDialog);
+    if (!dir.isEmpty()) {
+        ui->romPathLineEdit->setText(dir);
+    }
+}
+
+void MainWindow::browseDemulPath()
+{
+    qDebug() << "browseDemulPath triggered";
+    QString dir = QFileDialog::getExistingDirectory(this, tr("Select DemulShooter Directory"), ui->demulShooterPathLineEdit->text(), QFileDialog::DontUseNativeDialog);
+    if (!dir.isEmpty()) {
+        ui->demulShooterPathLineEdit->setText(dir);
+    }
+}
+
+void MainWindow::updateIniText() {
+    // If we're loading an INI file, don't regenerate the text
+    if (isLoadingIni) return;
+    
+    // If we're working with a loaded INI file, preserve its structure
+    if (hasLoadedIni && !originalIniContent.isEmpty()) {
+        // Working copy of the original content
+        QString updatedContent = originalIniContent;
+        
+        // Determine how many players this INI file supports
+        int playerCount = 1; // Default to 1
+        
+        // Check which player colors are enabled in the UI
+        if (ui->P4Color->isEnabled()) playerCount = 4;
+        else if (ui->P3Color->isEnabled()) playerCount = 3;
+        else if (ui->P2Color->isEnabled()) playerCount = 2;
+        
+        // Determine the values that need to be updated
+        
+        // Start command
+        QString start;
+        if (ui->StartCommands->currentText() == "S0 - Start with solenoid enabled") start = "S0";
+        else if (ui->StartCommands->currentText() == "S1 - Start with rumble enabled") start = "S1";
+        else if (ui->StartCommands->currentText() == "S2 - Start with the RED LED enabled") start = "S2";
+        else if (ui->StartCommands->currentText() == "S3 - Start with the GREEN LED enabled") start = "S3";
+        else if (ui->StartCommands->currentText() == "S4 - Start with the BLUE LED enabled") start = "S4";
+        else if (ui->StartCommands->currentText() == "S6 - Start with everything enabled") start = "S6";
+        
+        // Update MameStart command while preserving players
+        if (!start.isEmpty()) {
+            QRegularExpression mameStartRegex(R"(MameStart\s*=\s*(.*))");
+            auto match = mameStartRegex.match(updatedContent);
+            if (match.hasMatch()) {
+                QString mameStartLine = match.captured(0);
+                QString mameStartValue = match.captured(1);
+                
+                // Replace S0, S1, etc. in the existing line
+                QRegularExpression sCommandRegex(R"(S[0-6])");
+                QString newMameStartValue = mameStartValue;
+                if (sCommandRegex.match(mameStartValue).hasMatch()) {
+                    newMameStartValue = mameStartValue.replace(sCommandRegex, start);
+                } else {
+                    // If no S command found, append it to each cmw section
+                    QRegularExpression cmwRegex(R"(cmw\s+\d+\s+)");
+                    newMameStartValue = mameStartValue.replace(cmwRegex, "\\0" + start + " ");
+                }
+                
+                updatedContent.replace(mameStartLine, "MameStart = " + newMameStartValue);
+            }
+        }
+        
+        // Update General section with all the different modes
+        int generalSectionPos = updatedContent.indexOf("[General]");
+        if (generalSectionPos >= 0) {
+            // Find the end of the General section
+            int nextSectionPos = updatedContent.indexOf("[", generalSectionPos + 1);
+            if (nextSectionPos < 0) nextSectionPos = updatedContent.length();
+            
+            // Extract the General section
+            QString generalSection = updatedContent.mid(generalSectionPos, nextSectionPos - generalSectionPos);
+            
+            // Debug the General section
+            qDebug() << "Original General section:" << generalSection;
+            
+            // Create a new General section preserving important lines
+            QString newGeneralSection = "[General]\n";
+            
+            // Extract and keep important lines
+            QStringList lines = generalSection.split("\n");
+            bool hasModeFlags = false;
+            
+            for (const QString& line : lines) {
+                // Skip the [General] line (we already added it)
+                if (line.trimmed() == "[General]") continue;
+                
+                // Skip empty lines
+                if (line.trimmed().isEmpty()) continue;
+                
+                // Check for mode flags - can be inline or in a "Flags =" line
+                if (line.contains(QRegularExpression(R"(\b(M0x|M1x|M2x|M3x|M6x|M8x|MDx)\d+)")) || 
+                    line.trimmed().startsWith("Flags =")) {
+                    hasModeFlags = true;
+                    continue; // Skip these lines, we'll add our own
+                }
+                
+                // Keep all other lines
+                newGeneralSection += line + "\n";
+            }
+            
+            // Collect all mode values from UI
+            QStringList modeFlags;
+            
+            // Add Device Output Mode
+            if (ui->DeviceOutputMode->currentIndex() > 0) {
+                QString deviceMode;
+                if (ui->DeviceOutputMode->currentText().contains("M0x0")) deviceMode = "M0x0";
+                else if (ui->DeviceOutputMode->currentText().contains("M0x1L")) deviceMode = "M0x1L";
+                else if (ui->DeviceOutputMode->currentText().contains("M0x1")) deviceMode = "M0x1";
+                else if (ui->DeviceOutputMode->currentText().contains("M0x2")) deviceMode = "M0x2";
+                
+                if (!deviceMode.isEmpty()) {
+                    modeFlags << deviceMode;
+                }
+            }
+            
+            // Add Offscreen Firing Mode
+            if (ui->OffscreenFiringMode->currentIndex() > 0) {
+                QString offscreenMode;
+                if (ui->OffscreenFiringMode->currentText().contains("M1x0")) offscreenMode = "M1x0";
+                else if (ui->OffscreenFiringMode->currentText().contains("M1x1")) offscreenMode = "M1x1";
+                else if (ui->OffscreenFiringMode->currentText().contains("M1x2")) offscreenMode = "M1x2";
+                else if (ui->OffscreenFiringMode->currentText().contains("M1x3")) offscreenMode = "M1x3";
+                
+                if (!offscreenMode.isEmpty()) {
+                    modeFlags << offscreenMode;
+                }
+            }
+            
+            // Add Pedal Mapping
+            if (ui->PedalMapping->currentIndex() > 0) {
+                QString pedalMode;
+                if (ui->PedalMapping->currentText().contains("M2x0")) pedalMode = "M2x0";
+                else if (ui->PedalMapping->currentText().contains("M2x1")) pedalMode = "M2x1";
+                else if (ui->PedalMapping->currentText().contains("M2x2")) pedalMode = "M2x2";
+                
+                if (!pedalMode.isEmpty()) {
+                    modeFlags << pedalMode;
+                }
+            }
+            
+            // Add Aspect Ratio Correction
+            if (ui->AspectRatioCorrection->currentIndex() > 0) {
+                QString aspectMode;
+                if (ui->AspectRatioCorrection->currentText().contains("M3x0")) aspectMode = "M3x0";
+                else if (ui->AspectRatioCorrection->currentText().contains("M3x1")) aspectMode = "M3x1";
+                
+                if (!aspectMode.isEmpty()) {
+                    modeFlags << aspectMode;
+                }
+            }
+            
+            // Add Rumble Only Mode
+            if (ui->RumbleOnlyMode->currentIndex() > 0) {
+                QString rumbleMode;
+                if (ui->RumbleOnlyMode->currentText().contains("M6x0")) rumbleMode = "M6x0";
+                else if (ui->RumbleOnlyMode->currentText().contains("M6x1")) rumbleMode = "M6x1";
+                
+                if (!rumbleMode.isEmpty()) {
+                    modeFlags << rumbleMode;
+                }
+            }
+            
+            // Add Auto Fire Mode
+            if (ui->AutoFireMode->currentIndex() > 0) {
+                QString autoFireMode;
+                if (ui->AutoFireMode->currentText().contains("M8x0")) autoFireMode = "M8x0";
+                else if (ui->AutoFireMode->currentText().contains("M8x1")) autoFireMode = "M8x1";
+                else if (ui->AutoFireMode->currentText().contains("M8x2")) autoFireMode = "M8x2";
+                
+                if (!autoFireMode.isEmpty()) {
+                    modeFlags << autoFireMode;
+                }
+            }
+            
+            // Add Display Mode
+            if (ui->DisplayMode->currentIndex() > 0) {
+                QString displayMode;
+                if (ui->DisplayMode->currentText().contains("MDx1")) displayMode = "MDx1";
+                else if (ui->DisplayMode->currentText().contains("MDx2")) displayMode = "MDx2";
+                else if (ui->DisplayMode->currentText().contains("MDx3B")) displayMode = "MDx3B";
+                else if (ui->DisplayMode->currentText().contains("MDx3")) displayMode = "MDx3";
+                
+                if (!displayMode.isEmpty()) {
+                    modeFlags << displayMode;
+                }
+            }
+            
+            // Instead of adding Flags line, modify MameStart line to include mode flags
+            if (!modeFlags.isEmpty()) {
+                QString modeCommand = "";
+                for (const QString& flag : modeFlags) {
+                    if (!modeCommand.isEmpty()) {
+                        modeCommand += "x";
+                    }
+                    modeCommand += flag;
+                }
+                
+                // Find MameStart line
+                QRegularExpression mameStartRegex("MameStart\\s*=\\s*(.*)");
+                QRegularExpressionMatch match = mameStartRegex.match(newGeneralSection);
+                
+                if (match.hasMatch()) {
+                    QString mameStartLine = match.captured(0);
+                    QString mameStartValue = match.captured(1);
+                    
+                    // Replace S6 with S6xMODEFLAGS
+                    // First, find all cmw commands
+                    QRegularExpression sCommandRegex("(cmw\\s+\\d+\\s+S\\d+)(?:x[^,\\s]*)*");
+                    QString modifiedMameStartValue = mameStartValue;
+                    
+                    // For each cmw command, replace it with the same command + mode flags
+                    QRegularExpressionMatchIterator it = sCommandRegex.globalMatch(mameStartValue);
+                    while (it.hasNext()) {
+                        QRegularExpressionMatch cmdMatch = it.next();
+                        QString originalCmd = cmdMatch.captured(0);
+                        QString baseCmd = cmdMatch.captured(1);
+                        
+                        // Replace the entire command with the base command + new mode flags
+                        QString newCmd = baseCmd;
+                        if (!modeCommand.isEmpty()) {
+                            newCmd += "x" + modeCommand;
+                        }
+                        
+                        modifiedMameStartValue.replace(originalCmd, newCmd);
+                    }
+                    
+                    // Replace the entire MameStart line
+                    newGeneralSection.replace(mameStartLine, "MameStart = " + modifiedMameStartValue);
+                }
+            }
+            
+            // We don't add the Flags line anymore
+            
+            // Add empty line at the end
+            if (!newGeneralSection.endsWith("\n\n")) {
+                newGeneralSection += "\n";
+            }
+            
+            // Debug the new General section
+            qDebug() << "New General section:" << newGeneralSection;
+            
+            // Replace the old General section with our new one
+            updatedContent.replace(generalSectionPos, nextSectionPos - generalSectionPos, newGeneralSection);
+        }
+        
+        // LED commands for players
+        for (int player = 1; player <= playerCount; player++) {
+            QComboBox* playerColor = nullptr;
+            if (player == 1) playerColor = ui->P1Color;
+            else if (player == 2) playerColor = ui->P2Color;
+            else if (player == 3) playerColor = ui->P3Color;
+            else if (player == 4) playerColor = ui->P4Color;
+            
+            if (playerColor && playerColor->isEnabled() && playerColor->currentIndex() > 0) {
+                QColor color = playerColor->currentData().value<QColor>();
+                QString lmpCommand = QString("cmw %1 F2x1x%2xF3x1x%3xF4x1x%4 | F2x0xF3x0xF4x0")
+                                    .arg(player)
+                                    .arg(color.red())
+                                    .arg(color.green())
+                                    .arg(color.blue());
+                
+                // Format of the line we're looking for
+                QString playerLmpKey = QString("P%1_LmpStart").arg(player);
+                
+                if (updatedContent.contains(playerLmpKey)) {
+                    QStringList lines = updatedContent.split("\n");
+                    for (int i = 0; i < lines.size(); i++) {
+                        QString line = lines[i];
+                        if (line.contains(playerLmpKey)) {
+                            lines[i] = QString("P%1_LmpStart = %2").arg(player).arg(lmpCommand);
+                            break;
+                        }
+                    }
+                    updatedContent = lines.join("\n");
+                } else {
+                    int outputSectionPos = updatedContent.indexOf("[Output]");
+                    if (outputSectionPos >= 0) {
+                        int nextSectionPos = updatedContent.indexOf("[", outputSectionPos + 1);
+                        if (nextSectionPos < 0) nextSectionPos = updatedContent.length();
+                        
+                        QString newLine = QString("\nP%1_LmpStart = %2").arg(player).arg(lmpCommand);
+                        updatedContent.insert(nextSectionPos, newLine);
+                    }
+                }
+            }
+        }
+        
+        // Only update visible settings
+        
+        // Update Recoil settings if visible
+        if (ui->Recoil->isVisible()) {
+            QString recoil;
+            if (!ui->Recoil_Text->toPlainText().isEmpty()) recoil = ui->Recoil_Text->toPlainText();
+            else if (ui->Recoil->currentText() == "------") recoil = "";
+            else if (ui->Recoil->currentText() == "Solenoid Single Pulse (recommended)") recoil = "F0x2x1";
+            else if (ui->Recoil->currentText() == "Solenoid Switching") recoil = "F0x%s%";
+            else if (ui->Recoil->currentText() == "Rumble Single Pulse (recommended for rumble)") recoil = "F1x2x1";
+            else if (ui->Recoil->currentText() == "Rumble Switching") recoil = "F1x%s%";
+            
+            if (!recoil.isEmpty()) {
+                for (int player = 1; player <= playerCount; player++) {
+                    // Only update for enabled players
+                    bool playerEnabled = (player == 1 && ui->P1Color->isEnabled()) || 
+                                        (player == 2 && ui->P2Color->isEnabled()) || 
+                                        (player == 3 && ui->P3Color->isEnabled()) || 
+                                        (player == 4 && ui->P4Color->isEnabled());
+                    
+                    if (!playerEnabled) continue;
+                    
+                    QString playerRecoilKey = QString("P%1_CtmRecoil").arg(player);
+                    
+                    if (updatedContent.contains(playerRecoilKey)) {
+                        QStringList lines = updatedContent.split("\n");
+                        for (int i = 0; i < lines.size(); i++) {
+                            QString line = lines[i];
+                            if (line.contains(playerRecoilKey)) {
+                                lines[i] = QString("P%1_CtmRecoil = cmw %1 %2").arg(player).arg(recoil);
+                                break;
+                            }
+                        }
+                        updatedContent = lines.join("\n");
+                    } else {
+                        int outputSectionPos = updatedContent.indexOf("[Output]");
+                        if (outputSectionPos >= 0) {
+                            int nextSectionPos = updatedContent.indexOf("[", outputSectionPos + 1);
+                            if (nextSectionPos < 0) nextSectionPos = updatedContent.length();
+                            
+                            QString newLine = QString("\nP%1_CtmRecoil = cmw %1 %2").arg(player).arg(recoil);
+                            updatedContent.insert(nextSectionPos, newLine);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Update Damage settings if visible
+        if (ui->Damage->isVisible()) {
+            QString damage;
+            if (!ui->Damage_Text->toPlainText().isEmpty()) damage = ui->Damage_Text->toPlainText();
+            else if (ui->Damage->currentText() == "------") damage = "";
+            else if (ui->Damage->currentText() == "Rumble Single Pulse (recommended)") damage = "F1x2x1";
+            else if (ui->Damage->currentText() == "Rumble Switching") damage = "F1x%s%";
+            
+            if (!damage.isEmpty()) {
+                for (int player = 1; player <= playerCount; player++) {
+                    // Only update for enabled players
+                    bool playerEnabled = (player == 1 && ui->P1Color->isEnabled()) || 
+                                        (player == 2 && ui->P2Color->isEnabled()) || 
+                                        (player == 3 && ui->P3Color->isEnabled()) || 
+                                        (player == 4 && ui->P4Color->isEnabled());
+                    
+                    if (!playerEnabled) continue;
+                    
+                    QString playerDamageKey = QString("P%1_Damage").arg(player);
+                    
+                    if (updatedContent.contains(playerDamageKey)) {
+                        QStringList lines = updatedContent.split("\n");
+                        for (int i = 0; i < lines.size(); i++) {
+                            QString line = lines[i];
+                            if (line.contains(playerDamageKey)) {
+                                lines[i] = QString("P%1_Damage = cmw %1 %2").arg(player).arg(damage);
+                                break;
+                            }
+                        }
+                        updatedContent = lines.join("\n");
+                    } else {
+                        int outputSectionPos = updatedContent.indexOf("[Output]");
+                        if (outputSectionPos >= 0) {
+                            int nextSectionPos = updatedContent.indexOf("[", outputSectionPos + 1);
+                            if (nextSectionPos < 0) nextSectionPos = updatedContent.length();
+                            
+                            QString newLine = QString("\nP%1_Damage = cmw %1 %2").arg(player).arg(damage);
+                            updatedContent.insert(nextSectionPos, newLine);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Update Clip settings if visible
+        if (ui->Clip->isVisible()) {
+            QString clip;
+            if (!ui->Clip_Text->toPlainText().isEmpty()) clip = ui->Clip_Text->toPlainText();
+            else if (ui->Clip->currentText() == "------") clip = "";
+            else if (ui->Clip->currentText() == "Red/Off") clip = "XX";
+            
+            if (!clip.isEmpty()) {
+                for (int player = 1; player <= playerCount; player++) {
+                    // Only update for enabled players
+                    bool playerEnabled = (player == 1 && ui->P1Color->isEnabled()) || 
+                                        (player == 2 && ui->P2Color->isEnabled()) || 
+                                        (player == 3 && ui->P3Color->isEnabled()) || 
+                                        (player == 4 && ui->P4Color->isEnabled());
+                    
+                    if (!playerEnabled) continue;
+                    
+                    QString playerClipKey = QString("P%1_Clip").arg(player);
+                    
+                    if (updatedContent.contains(playerClipKey)) {
+                        QStringList lines = updatedContent.split("\n");
+                        for (int i = 0; i < lines.size(); i++) {
+                            QString line = lines[i];
+                            if (line.contains(playerClipKey)) {
+                                lines[i] = QString("P%1_Clip = cmw %1 %2").arg(player).arg(clip);
+                                break;
+                            }
+                        }
+                        updatedContent = lines.join("\n");
+                    } else {
+                        int outputSectionPos = updatedContent.indexOf("[Output]");
+                        if (outputSectionPos >= 0) {
+                            int nextSectionPos = updatedContent.indexOf("[", outputSectionPos + 1);
+                            if (nextSectionPos < 0) nextSectionPos = updatedContent.length();
+                            
+                            QString newLine = QString("\nP%1_Clip = cmw %1 %2").arg(player).arg(clip);
+                            updatedContent.insert(nextSectionPos, newLine);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Update Ammo settings if visible
+        if (ui->Ammo->isVisible()) {
+            QString ammo;
+            if (!ui->Ammo_Text->toPlainText().isEmpty()) ammo = ui->Ammo_Text->toPlainText();
+            else if (ui->Ammo->currentText() == "------") ammo = "";
+            else if (ui->Ammo->currentText() == "OLED On") ammo = "DFAx%s%";
+            
+            if (!ammo.isEmpty()) {
+                for (int player = 1; player <= playerCount; player++) {
+                    // Only update for enabled players
+                    bool playerEnabled = (player == 1 && ui->P1Color->isEnabled()) || 
+                                        (player == 2 && ui->P2Color->isEnabled()) || 
+                                        (player == 3 && ui->P3Color->isEnabled()) || 
+                                        (player == 4 && ui->P4Color->isEnabled());
+                    
+                    if (!playerEnabled) continue;
+                    
+                    // Format of the line we're looking for
+                    QString playerAmmoKey = QString("P%1_Ammo").arg(player);
+                    
+                    // Check if the key exists in the content
+                    if (updatedContent.contains(playerAmmoKey)) {
+                        // Find the line with this key
+                        QStringList lines = updatedContent.split("\n");
+                        for (int i = 0; i < lines.size(); i++) {
+                            QString line = lines[i];
+                            // Check if this is the key we're looking for
+                            if (line.contains(playerAmmoKey)) {
+                                // Replace the line
+                                lines[i] = QString("P%1_Ammo = cmw %1 %2").arg(player).arg(ammo);
+                                break;
+                            }
+                        }
+                        updatedContent = lines.join("\n");
+                    } else {
+                        // Key doesn't exist, add it to the Output section
+                        int outputSectionPos = updatedContent.indexOf("[Output]");
+                        if (outputSectionPos >= 0) {
+                            // Find the end of the Output section
+                            int nextSectionPos = updatedContent.indexOf("[", outputSectionPos + 1);
+                            if (nextSectionPos < 0) nextSectionPos = updatedContent.length();
+                            
+                            // Insert the new line just before the next section or at the end
+                            QString newLine = QString("\nP%1_Ammo = cmw %1 %2").arg(player).arg(ammo);
+                            updatedContent.insert(nextSectionPos, newLine);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Update Life settings if visible
+        if (ui->Life->isVisible()) {
+            QString life;
+            if (!ui->Life_Text->toPlainText().isEmpty()) life = ui->Life_Text->toPlainText();
+            else if (ui->Life->currentText() == "------") life = "";
+            else if (ui->Life->currentText() == "OLED On") life = "XX";
+            
+            if (!life.isEmpty()) {
+                for (int player = 1; player <= playerCount; player++) {
+                    // Only update for enabled players
+                    bool playerEnabled = (player == 1 && ui->P1Color->isEnabled()) || 
+                                        (player == 2 && ui->P2Color->isEnabled()) || 
+                                        (player == 3 && ui->P3Color->isEnabled()) || 
+                                        (player == 4 && ui->P4Color->isEnabled());
+                    
+                    if (!playerEnabled) continue;
+                    
+                    QString playerLifeKey = QString("P%1_Life").arg(player);
+                    
+                    if (updatedContent.contains(playerLifeKey)) {
+                        QStringList lines = updatedContent.split("\n");
+                        for (int i = 0; i < lines.size(); i++) {
+                            QString line = lines[i];
+                            if (line.contains(playerLifeKey)) {
+                                lines[i] = QString("P%1_Life = cmw %1 %2").arg(player).arg(life);
+                                break;
+                            }
+                        }
+                        updatedContent = lines.join("\n");
+                    } else {
+                        int outputSectionPos = updatedContent.indexOf("[Output]");
+                        if (outputSectionPos >= 0) {
+                            int nextSectionPos = updatedContent.indexOf("[", outputSectionPos + 1);
+                            if (nextSectionPos < 0) nextSectionPos = updatedContent.length();
+                            
+                            QString newLine = QString("\nP%1_Life = cmw %1 %2").arg(player).arg(life);
+                            updatedContent.insert(nextSectionPos, newLine);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Update Credits settings if visible
+        if (ui->Credits->isVisible()) {
+            QString credits;
+            if (!ui->Credits_Text->toPlainText().isEmpty()) credits = ui->Credits_Text->toPlainText();
+            else if (ui->Credits->currentText() == "------") credits = "";
+            else if (ui->Credits->currentText() == "OLED On (coming soon)") credits = "XX";
+            
+            if (!credits.isEmpty()) {
+                if (updatedContent.contains("Credits =")) {
+                    QStringList lines = updatedContent.split("\n");
+                    for (int i = 0; i < lines.size(); i++) {
+                        QString line = lines[i];
+                        if (line.contains("Credits =")) {
+                            lines[i] = QString("Credits = cmw 1 %1").arg(credits);
+                            break;
+                        }
+                    }
+                    updatedContent = lines.join("\n");
+                } else {
+                    int outputSectionPos = updatedContent.indexOf("[Output]");
+                    if (outputSectionPos >= 0) {
+                        int nextSectionPos = updatedContent.indexOf("[", outputSectionPos + 1);
+                        if (nextSectionPos < 0) nextSectionPos = updatedContent.length();
+                        
+                        QString newLine = QString("\nCredits = cmw 1 %1").arg(credits);
+                        updatedContent.insert(nextSectionPos, newLine);
+                    }
+                }
+            }
+        }
+        
+        // Handle custom settings
+        if (ui->Custom1->isVisible() && ui->lineEdit->text() != "Custom 1.") {
+            QString settingName = ui->lineEdit->text();
+            QString value;
+            if (!ui->Custom1_Text->toPlainText().isEmpty()) value = ui->Custom1_Text->toPlainText();
+            else if (ui->Custom1->currentText() == "------") value = "";
+            
+            if (!value.isEmpty()) {
+                for (int player = 1; player <= playerCount; player++) {
+                    // Only update for enabled players
+                    bool playerEnabled = (player == 1 && ui->P1Color->isEnabled()) || 
+                                         (player == 2 && ui->P2Color->isEnabled()) || 
+                                         (player == 3 && ui->P3Color->isEnabled()) || 
+                                         (player == 4 && ui->P4Color->isEnabled());
+                    
+                    if (!playerEnabled) continue;
+                    
+                    QString playerKey = QString("P%1_%2").arg(player).arg(settingName);
+                    
+                    if (updatedContent.contains(playerKey)) {
+                        QStringList lines = updatedContent.split("\n");
+                        for (int i = 0; i < lines.size(); i++) {
+                            QString line = lines[i];
+                            if (line.contains(playerKey)) {
+                                lines[i] = QString("P%1_%2 = cmw %1 %3").arg(player).arg(settingName).arg(value);
+                                break;
+                            }
+                        }
+                        updatedContent = lines.join("\n");
+                    } else {
+                        int outputSectionPos = updatedContent.indexOf("[Output]");
+                        if (outputSectionPos >= 0) {
+                            int nextSectionPos = updatedContent.indexOf("[", outputSectionPos + 1);
+                            if (nextSectionPos < 0) nextSectionPos = updatedContent.length();
+                            
+                            QString newLine = QString("\nP%1_%2 = cmw %1 %3").arg(player).arg(settingName).arg(value);
+                            updatedContent.insert(nextSectionPos, newLine);
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (ui->Custom2->isVisible() && ui->lineEdit_2->text() != "Custom 2.") {
+            QString settingName = ui->lineEdit_2->text();
+            QString value;
+            if (!ui->Custom2_Text->toPlainText().isEmpty()) value = ui->Custom2_Text->toPlainText();
+            else if (ui->Custom2->currentText() == "------") value = "";
+            
+            if (!value.isEmpty()) {
+                for (int player = 1; player <= playerCount; player++) {
+                    // Only update for enabled players
+                    bool playerEnabled = (player == 1 && ui->P1Color->isEnabled()) || 
+                                         (player == 2 && ui->P2Color->isEnabled()) || 
+                                         (player == 3 && ui->P3Color->isEnabled()) || 
+                                         (player == 4 && ui->P4Color->isEnabled());
+                    
+                    if (!playerEnabled) continue;
+                    
+                    QString playerKey = QString("P%1_%2").arg(player).arg(settingName);
+                    
+                    if (updatedContent.contains(playerKey)) {
+                        QStringList lines = updatedContent.split("\n");
+                        for (int i = 0; i < lines.size(); i++) {
+                            QString line = lines[i];
+                            if (line.contains(playerKey)) {
+                                lines[i] = QString("P%1_%2 = cmw %1 %3").arg(player).arg(settingName).arg(value);
+                                break;
+                            }
+                        }
+                        updatedContent = lines.join("\n");
+                    } else {
+                        int outputSectionPos = updatedContent.indexOf("[Output]");
+                        if (outputSectionPos >= 0) {
+                            int nextSectionPos = updatedContent.indexOf("[", outputSectionPos + 1);
+                            if (nextSectionPos < 0) nextSectionPos = updatedContent.length();
+                            
+                            QString newLine = QString("\nP%1_%2 = cmw %1 %3").arg(player).arg(settingName).arg(value);
+                            updatedContent.insert(nextSectionPos, newLine);
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (ui->Custom3->isVisible() && ui->lineEdit_3->text() != "Custom 3.") {
+            QString settingName = ui->lineEdit_3->text();
+            QString value;
+            if (!ui->Custom3_Text->toPlainText().isEmpty()) value = ui->Custom3_Text->toPlainText();
+            else if (ui->Custom3->currentText() == "------") value = "";
+            
+            if (!value.isEmpty()) {
+                for (int player = 1; player <= playerCount; player++) {
+                    // Only update for enabled players
+                    bool playerEnabled = (player == 1 && ui->P1Color->isEnabled()) || 
+                                         (player == 2 && ui->P2Color->isEnabled()) || 
+                                         (player == 3 && ui->P3Color->isEnabled()) || 
+                                         (player == 4 && ui->P4Color->isEnabled());
+                    
+                    if (!playerEnabled) continue;
+                    
+                    QString playerKey = QString("P%1_%2").arg(player).arg(settingName);
+                    
+                    if (updatedContent.contains(playerKey)) {
+                        QStringList lines = updatedContent.split("\n");
+                        for (int i = 0; i < lines.size(); i++) {
+                            QString line = lines[i];
+                            if (line.contains(playerKey)) {
+                                lines[i] = QString("P%1_%2 = cmw %1 %3").arg(player).arg(settingName).arg(value);
+                                break;
+                            }
+                        }
+                        updatedContent = lines.join("\n");
+                    } else {
+                        int outputSectionPos = updatedContent.indexOf("[Output]");
+                        if (outputSectionPos >= 0) {
+                            int nextSectionPos = updatedContent.indexOf("[", outputSectionPos + 1);
+                            if (nextSectionPos < 0) nextSectionPos = updatedContent.length();
+                            
+                            QString newLine = QString("\nP%1_%2 = cmw %1 %3").arg(player).arg(settingName).arg(value);
+                            updatedContent.insert(nextSectionPos, newLine);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Update the displayed text with our modified content
+        ui->plainTextEdit_Generic->setPlainText(updatedContent);
+    }
+}
+
+void MainWindow::updateEmulatorPath()
+{
+    QString emulator = ui->emulatorComboBox->currentText();
+    QString emulatorPath, romPath;
+    
+    EmulatorUtils::updateEmulatorPath(emulator, emulatorPath, romPath);
+    
+    ui->emulatorPathLineEdit->setText(emulatorPath);
+    ui->romPathLineEdit->setText(romPath);
+    
+    // Set platform-appropriate default paths for the QMamehooker and DemulShooter paths
+    if (ui->qmamehookerPathLineEdit->text().startsWith("C:/")) {
+        #ifdef Q_OS_WIN
+        ui->qmamehookerPathLineEdit->setText("C:/QMamehook");
+        ui->demulShooterPathLineEdit->setText("C:/DemulShooter");
+        #else
+        ui->qmamehookerPathLineEdit->setText(QDir::homePath() + "/QMamehook");
+        ui->demulShooterPathLineEdit->setText(QDir::homePath() + "/DemulShooter");
+        #endif
+    }
+}
+
+void MainWindow::loadIniSettings(const QString &romName)
+{
+    // Reset INI state when changing ROMs
+    originalIniContent = "";
+    hasLoadedIni = false;
+    ui->plainTextEdit_Generic->clear();
+    
+    QString rom2 = EmulatorUtils::mapRom(romName);
+    if (rom2.isEmpty()) return;
+
+    QString qmamehookerPath = ui->qmamehookerPathLineEdit->text();
+    QString iniPath = qmamehookerPath + "/ini/" + rom2 + ".ini";
+    QFile iniFile(iniPath);
+
+    if (!iniFile.exists()) {
+        ui->plainTextEdit_Generic->clear();
+        return;
+    }
+
+    // Set the flag to indicate we're loading an INI file
+    isLoadingIni = true;
+
+    if (iniFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QString iniContent = iniFile.readAll();
+        iniFile.close();
+        
+        // Store the original INI content for structure preservation
+        originalIniContent = iniContent;
+        hasLoadedIni = true;
+        
+        // Load the INI file content verbatim without modifications
+        ui->plainTextEdit_Generic->setPlainText(iniContent);
+        
+        // Load General settings first
+        int generalSectionPos = iniContent.indexOf("[General]");
+        if (generalSectionPos >= 0) {
+            // Find the end of the General section
+            int nextSectionPos = iniContent.indexOf("[", generalSectionPos + 1);
+            if (nextSectionPos < 0) nextSectionPos = iniContent.length();
+            
+            // Extract the General section
+            QString generalSection = iniContent.mid(generalSectionPos, nextSectionPos - generalSectionPos);
+            
+            qDebug() << "Loaded General section:" << generalSection;
+            
+            // Look for each of the General section settings with more flexible regex patterns
+            
+            // First, extract any mode flags from the MameStart command
+            QRegularExpression mameStartRegex(R"(MameStart\s*=.*?cmw\s+\d+\s+S\d+(?:x(?:[^,\s]+))*)");
+            auto mameStartMatch = mameStartRegex.match(generalSection);
+            
+            QString modeFlags;
+            if (mameStartMatch.hasMatch()) {
+                QString startCommand = mameStartMatch.captured(0);
+                // Extract the part after S6x (or any S command)
+                QRegularExpression flagsRegex(R"(S\d+(x.+)(?=\s|,|$))");
+                auto flagsMatch = flagsRegex.match(startCommand);
+                if (flagsMatch.hasMatch()) {
+                    modeFlags = flagsMatch.captured(1);
+                    // Remove the leading 'x' if present
+                    if (modeFlags.startsWith('x')) {
+                        modeFlags.remove(0, 1);
+                    }
+                    qDebug() << "Extracted mode flags from MameStart:" << modeFlags;
+                }
+            }
+            
+            // Device Output Mode (M0)
+            // Match M0x0, M0x1, M0x1L, M0x2 etc. allowing for optional spaces and other characters around it
+            QRegularExpression deviceModeRegex(R"((?:^|x)M0x(\d+L?)(?:$|x))");
+            auto deviceMatch = deviceModeRegex.match(modeFlags.isEmpty() ? generalSection : modeFlags);
+            if (deviceMatch.hasMatch()) {
+                QString value = deviceMatch.captured(1);
+                QString fullMatch = "M0x" + value;
+                qDebug() << "Found Device Mode:" << fullMatch;
+                
+                
+                if (value == "0") {
+                    ui->DeviceOutputMode->setCurrentText("M0x0 - Mouse & Keyboard");
+                } else if (value == "1") {
+                    ui->DeviceOutputMode->setCurrentText("M0x1 - Gamepad, w/ Camera mapped to Right Stick");
+                } else if (value == "1L") {
+                    ui->DeviceOutputMode->setCurrentText("M0x1L - Maps Camera to Left Stick instead (OpenFIRE exclusive)");
+                } else if (value == "2") {
+                    ui->DeviceOutputMode->setCurrentText("M0x2 - 'Hybrid'");
+                } else {
+                    ui->DeviceOutputMode->setCurrentIndex(0); // Default to first item
+                }
+            } else {
+                qDebug() << "Device Mode not found";
+                ui->DeviceOutputMode->setCurrentIndex(0); // Default to first item
+            }
+            
+            // Offscreen Firing Mode (M1)
+            QRegularExpression offscreenRegex(R"((?:^|x)M1x(\d+)(?:$|x))");
+            auto offscreenMatch = offscreenRegex.match(modeFlags.isEmpty() ? generalSection : modeFlags);
+            if (offscreenMatch.hasMatch()) {
+                QString value = offscreenMatch.captured(1);
+                QString fullMatch = "M1x" + value;
+                qDebug() << "Found Offscreen Mode:" << fullMatch;
+                
+                if (value == "0") {
+                    ui->OffscreenFiringMode->setCurrentText("M1x0 - Disabled (not used in OpenFIRE)");
+                } else if (value == "1") {
+                    ui->OffscreenFiringMode->setCurrentText("M1x1 - Fire in bottom-left corner (not used in OpenFIRE)");
+                } else if (value == "2") {
+                    ui->OffscreenFiringMode->setCurrentText("M1x2 - Offscreen Button Mode enabled (i.e. offscreen trigger pulls generates a Right Click instead of a Left Click)");
+                } else if (value == "3") {
+                    ui->OffscreenFiringMode->setCurrentText("M1x3 - Normal shot (always on when Offscreen Button Mode isn't set in OpenFIRE)");
+                } else {
+                    ui->OffscreenFiringMode->setCurrentIndex(0); // Default to first item
+                }
+            } else {
+                qDebug() << "Offscreen Mode not found";
+                ui->OffscreenFiringMode->setCurrentIndex(0); // Default to first item
+            }
+            
+            // Pedal Mapping (M2)
+            QRegularExpression pedalRegex(R"((?:^|x)M2x(\d+)(?:$|x))");
+            auto pedalMatch = pedalRegex.match(modeFlags.isEmpty() ? generalSection : modeFlags);
+            if (pedalMatch.hasMatch()) {
+                QString value = pedalMatch.captured(1);
+                QString fullMatch = "M2x" + value;
+                qDebug() << "Found Pedal Mode:" << fullMatch;
+                
+                if (value == "0") {
+                    ui->PedalMapping->setCurrentText("M2x0 - Separate Button (as mapped)");
+                } else if (value == "1") {
+                    ui->PedalMapping->setCurrentText("M2x1 - As Right Mouse");
+                } else if (value == "2") {
+                    ui->PedalMapping->setCurrentText("M2x2 - As Middle Mouse (OpenFIRE exclusive)");
+                } else {
+                    ui->PedalMapping->setCurrentIndex(0); // Default to first item
+                }
+            } else {
+                qDebug() << "Pedal Mode not found";
+                ui->PedalMapping->setCurrentIndex(0); // Default to first item
+            }
+            
+            // Aspect Ratio Correction (M3)
+            QRegularExpression aspectRegex(R"((?:^|x)M3x(\d+)(?:$|x))");
+            auto aspectMatch = aspectRegex.match(modeFlags.isEmpty() ? generalSection : modeFlags);
+            if (aspectMatch.hasMatch()) {
+                QString value = aspectMatch.captured(1);
+                QString fullMatch = "M3x" + value;
+                qDebug() << "Found Aspect Ratio Mode:" << fullMatch;
+                
+                if (value == "0") {
+                    ui->AspectRatioCorrection->setCurrentText("M3x0 - Fullscreen");
+                } else if (value == "1") {
+                    ui->AspectRatioCorrection->setCurrentText("M3x1 - 4:3 Correction");
+                } else {
+                    ui->AspectRatioCorrection->setCurrentIndex(0); // Default to first item
+                }
+            } else {
+                qDebug() << "Aspect Ratio Mode not found";
+                ui->AspectRatioCorrection->setCurrentIndex(0); // Default to first item
+            }
+            
+            // Rumble Only Mode (M6)
+            QRegularExpression rumbleRegex(R"((?:^|x)M6x(\d+)(?:$|x))");
+            auto rumbleMatch = rumbleRegex.match(modeFlags.isEmpty() ? generalSection : modeFlags);
+            if (rumbleMatch.hasMatch()) {
+                QString value = rumbleMatch.captured(1);
+                QString fullMatch = "M6x" + value;
+                qDebug() << "Found Rumble Only Mode:" << fullMatch;
+                
+                if (value == "0") {
+                    ui->RumbleOnlyMode->setCurrentText("M6x0 - Disabled (Solenoid allowed)");
+                } else if (value == "1") {
+                    ui->RumbleOnlyMode->setCurrentText("M6x1 - Enabled (Solenoid disabled, Rumble enabled)");
+                } else {
+                    ui->RumbleOnlyMode->setCurrentIndex(0); // Default to first item
+                }
+            } else {
+                qDebug() << "Rumble Only Mode not found";
+                ui->RumbleOnlyMode->setCurrentIndex(0); // Default to first item
+            }
+            
+            // Auto Fire Mode (M8)
+            QRegularExpression autoFireRegex(R"((?:^|x)M8x(\d+)(?:$|x))");
+            auto autoFireMatch = autoFireRegex.match(modeFlags.isEmpty() ? generalSection : modeFlags);
+            if (autoFireMatch.hasMatch()) {
+                QString value = autoFireMatch.captured(1);
+                QString fullMatch = "M8x" + value;
+                qDebug() << "Found Auto Fire Mode:" << fullMatch;
+                
+                if (value == "0") {
+                    ui->AutoFireMode->setCurrentText("M8x0 - Disabled (sustained fire is kept enabled in OpenFIRE)");
+                } else if (value == "1") {
+                    ui->AutoFireMode->setCurrentText("M8x1 - Auto fire on (enables Burst Fire in OpenFIRE)");
+                } else if (value == "2") {
+                    ui->AutoFireMode->setCurrentText("M8x2 - Auto fire always on rapid fire");
+                } else {
+                    ui->AutoFireMode->setCurrentIndex(0); // Default to first item
+                }
+            } else {
+                ui->AutoFireMode->setCurrentIndex(0); // Default to first item
+            }
+            
+            // Display Mode (MD)
+            QRegularExpression displayRegex(R"((?:^|x)MDx(\d+)(?:B)?(?:$|x))");
+            auto displayMatch = displayRegex.match(modeFlags.isEmpty() ? generalSection : modeFlags);
+            if (displayMatch.hasMatch()) {
+                QString value = displayMatch.captured(1);
+                QString fullCapture = displayMatch.captured(0);
+                QString fullMatch = fullCapture.contains("B") ? "MDx" + value + "B" : "MDx" + value;
+                qDebug() << "Found Display Mode:" << fullMatch;
+                
+                if (value == "1") {
+                    ui->DisplayMode->setCurrentText("MDx1 - Life Only");
+                } else if (value == "2") {
+                    ui->DisplayMode->setCurrentText("MDx2 - Ammo Only");
+                } else if (value == "3") {
+                    if (fullCapture.contains("MDx3B")) {
+                        ui->DisplayMode->setCurrentText("MDx3B - Life Bar (Life Glyphs otherwise)");
+                    } else {
+                        ui->DisplayMode->setCurrentText("MDx3 - Life & Ammo Splitscreen");
+                    }
+                } else {
+                    ui->DisplayMode->setCurrentIndex(0); // Default to first item
+                }
+            } else {
+                ui->DisplayMode->setCurrentIndex(0); // Default to first item
+            }
+            
+            // Start Command (S)
+            QRegularExpression startRegex(R"(MameStart\s*=.*?cmw\s+\d+\s+(S[0-6])(?:x|[\s,]))");
+            auto startMatch = startRegex.match(iniContent);
+            if (startMatch.hasMatch()) {
+                QString value = startMatch.captured(1);
+                qDebug() << "Updating Start Commands dropdown to:" << value;
+                if (value == "S0") {
+                    ui->StartCommands->setCurrentText("S0 - Start with solenoid enabled");
+                } else if (value == "S1") {
+                    ui->StartCommands->setCurrentText("S1 - Start with rumble enabled");
+                } else if (value == "S2") {
+                    ui->StartCommands->setCurrentText("S2 - Start with the RED LED enabled");
+                } else if (value == "S3") {
+                    ui->StartCommands->setCurrentText("S3 - Start with the GREEN LED enabled");
+                } else if (value == "S4") {
+                    ui->StartCommands->setCurrentText("S4 - Start with the BLUE LED enabled");
+                } else if (value == "S6") {
+                    ui->StartCommands->setCurrentText("S6 - Start with everything enabled");
+                } else {
+                    ui->StartCommands->setCurrentIndex(5); // Default to S6
+                }
+                qDebug() << "Updating Start Commands dropdown to:" << ui->StartCommands->currentText();
+            } else {
+                ui->StartCommands->setCurrentIndex(5); // Default to S6
+            }
+        }
+        
+        // Detect the number of players in the INI file
+        int playerCount = 0; // Default to 0 player, we'll set it to at least 1 later
+        
+        // First, check if there's an [Output] section
+        int outputSectionPos = iniContent.indexOf("[Output]");
+        if (outputSectionPos >= 0) {
+            // Find the end of the Output section
+            int nextSectionPos = iniContent.indexOf("[", outputSectionPos + 1);
+            if (nextSectionPos < 0) nextSectionPos = iniContent.length();
+            
+            // Extract the Output section
+            QString outputSection = iniContent.mid(outputSectionPos, nextSectionPos - outputSectionPos);
+            
+            // Check for player entries using various patterns
+            QSet<int> foundPlayers;
+            
+            // Pattern for P1_Something, Player1_Something, etc.
+            QRegularExpression playerPattern(R"(P(\d+)(?:_|\s*=|\s+))");
+            auto playerMatches = playerPattern.globalMatch(outputSection);
+            while (playerMatches.hasNext()) {
+                auto match = playerMatches.next();
+                bool ok;
+                int player = match.captured(1).toInt(&ok);
+                if (ok && player > 0) {
+                    foundPlayers.insert(player);
+                }
+            }
+            
+            // Pattern for Player1, Player 1, etc.
+            QRegularExpression player2Pattern(R"(Player\s*(\d+)(?:_|\s*=|\s+))");
+            auto player2Matches = player2Pattern.globalMatch(outputSection);
+            while (player2Matches.hasNext()) {
+                auto match = player2Matches.next();
+                bool ok;
+                int player = match.captured(1).toInt(&ok);
+                if (ok && player > 0) {
+                    foundPlayers.insert(player);
+                }
+            }
+            
+            // Also check MameStart line for player indicators
+            QRegularExpression mameStartRegex(R"(MameStart\s*=\s*(?:.*cmw\s+(\d+).*))");
+            auto mameStartMatches = mameStartRegex.globalMatch(iniContent);
+            while (mameStartMatches.hasNext()) {
+                auto match = mameStartMatches.next();
+                bool ok;
+                int player = match.captured(1).toInt(&ok);
+                if (ok && player > 0) {
+                    foundPlayers.insert(player);
+                }
+            }
+            
+            // If we found players, determine the max player count
+            if (!foundPlayers.isEmpty()) {
+                playerCount = *std::max_element(foundPlayers.begin(), foundPlayers.end());
+            }
+        }
+        
+        // Ensure at least 1 player
+        playerCount = qMax(1, playerCount);
+        
+        qDebug() << "Detected" << playerCount << "players in the INI file";
+        
+        // Enable or disable player controls based on detected player count
+        ui->P1Color->setEnabled(playerCount >= 1);
+        ui->P2Color->setEnabled(playerCount >= 2);
+        ui->P3Color->setEnabled(playerCount >= 3);
+        ui->P4Color->setEnabled(playerCount >= 4);
+        
+        // Detect existing settings in the INI file
+        QMap<QString, QSet<int>> settingsMap; // Maps setting name to player numbers
+        
+        // Scan for all settings in the [Output] section
+        if (outputSectionPos >= 0) {
+            int nextSectionPos = iniContent.indexOf("[", outputSectionPos + 1);
+            if (nextSectionPos < 0) nextSectionPos = iniContent.length();
+            
+            QString outputSection = iniContent.mid(outputSectionPos, nextSectionPos - outputSectionPos);
+            
+            // Find all player-based settings (P1_Something, P2_Something, etc.)
+            QRegularExpression settingPattern(R"(P(\d+)_(\w+)\s*=)");
+            auto settingMatches = settingPattern.globalMatch(outputSection);
+            
+            while (settingMatches.hasNext()) {
+                auto match = settingMatches.next();
+                bool ok;
+                int player = match.captured(1).toInt(&ok);
+                if (ok && player > 0) {
+                    QString settingName = match.captured(2);
+                    if (!settingsMap.contains(settingName)) {
+                        settingsMap[settingName] = QSet<int>();
+                    }
+                    settingsMap[settingName].insert(player);
+                }
+            }
+        }
+        
+        // Check if we need to hide any existing settings or add new ones
+        QStringList knownSettings = {"CtmRecoil", "Damage", "Clip", "Ammo", "Life"};
+        
+        // Hide/disable settings that don't exist in the INI file
+        for (const QString& setting : knownSettings) {
+            bool hasAnySetting = settingsMap.contains(setting);
+            
+            // If the setting exists for at least one player
+            if (hasAnySetting) {
+                // Check which specific UI component to update
+                if (setting == "CtmRecoil") {
+                    ui->Recoil->setVisible(true);
+                    ui->Recoil_Text->setVisible(true);
+                    ui->label_OpenFIRE_LmpStart_8->setVisible(true);
+                } else if (setting == "Damage") {
+                    ui->Damage->setVisible(true);
+                    ui->Damage_Text->setVisible(true);
+                    ui->label_OpenFIRE_LmpStart_10->setVisible(true);
+                } else if (setting == "Clip") {
+                    ui->Clip->setVisible(true);
+                    ui->Clip_Text->setVisible(true);
+                    ui->label_OpenFIRE_LmpStart_7->setVisible(true);
+                } else if (setting == "Ammo") {
+                    ui->Ammo->setVisible(true);
+                    ui->Ammo_Text->setVisible(true);
+                    ui->label_OpenFIRE_LmpStart_2->setVisible(true);
+                } else if (setting == "Life") {
+                    ui->Life->setVisible(true);
+                    ui->Life_Text->setVisible(true);
+                    ui->label_OpenFIRE_LmpStart_9->setVisible(true);
+                }
+            } else {
+                // If the setting doesn't exist, hide the corresponding UI elements
+                if (setting == "CtmRecoil") {
+                    ui->Recoil->setVisible(false);
+                    ui->Recoil_Text->setVisible(false);
+                    ui->label_OpenFIRE_LmpStart_8->setVisible(false);
+                } else if (setting == "Damage") {
+                    ui->Damage->setVisible(false);
+                    ui->Damage_Text->setVisible(false);
+                    ui->label_OpenFIRE_LmpStart_10->setVisible(false);
+                } else if (setting == "Clip") {
+                    ui->Clip->setVisible(false);
+                    ui->Clip_Text->setVisible(false);
+                    ui->label_OpenFIRE_LmpStart_7->setVisible(false);
+                } else if (setting == "Ammo") {
+                    ui->Ammo->setVisible(false);
+                    ui->Ammo_Text->setVisible(false);
+                    ui->label_OpenFIRE_LmpStart_2->setVisible(false);
+                } else if (setting == "Life") {
+                    ui->Life->setVisible(false);
+                    ui->Life_Text->setVisible(false);
+                    ui->label_OpenFIRE_LmpStart_9->setVisible(false);
+                }
+            }
+        }
+
+        // Check for custom settings that are not in our predefined list
+        for (auto it = settingsMap.begin(); it != settingsMap.end(); ++it) {
+            QString settingName = it.key();
+            if (!knownSettings.contains(settingName) && settingName != "LmpStart") {
+                // Only process settings that are not in our predefined list and not LmpStart
+                qDebug() << "Found custom setting:" << settingName;
+                
+                // Use an existing custom field if available
+                if (ui->lineEdit->text() == "Custom 1." && ui->Custom1->isVisible() == false) {
+                    ui->lineEdit->setText(settingName);
+                    ui->Custom1->setVisible(true);
+                    ui->Custom1_Text->setVisible(true);
+                    ui->lineEdit->setVisible(true);
+                    
+                    // Extract the value for this setting
+                    QRegularExpression customPattern(QString(R"(P1_%1\s*=\s*cmw\s+1\s+(.*?)(?=\r?\n|$))").arg(settingName));
+                    auto customMatch = customPattern.match(iniContent);
+                    if (customMatch.hasMatch()) {
+                        ui->Custom1_Text->setPlainText(customMatch.captured(1).trimmed());
+                    }
+                } 
+                else if (ui->lineEdit_2->text() == "Custom 2." && ui->Custom2->isVisible() == false) {
+                    ui->lineEdit_2->setText(settingName);
+                    ui->Custom2->setVisible(true);
+                    ui->Custom2_Text->setVisible(true);
+                    ui->lineEdit_2->setVisible(true);
+                    
+                    // Extract the value for this setting
+                    QRegularExpression customPattern(QString(R"(P1_%1\s*=\s*cmw\s+1\s+(.*?)(?=\r?\n|$))").arg(settingName));
+                    auto customMatch = customPattern.match(iniContent);
+                    if (customMatch.hasMatch()) {
+                        ui->Custom2_Text->setPlainText(customMatch.captured(1).trimmed());
+                    }
+                }
+                else if (ui->lineEdit_3->text() == "Custom 3." && ui->Custom3->isVisible() == false) {
+                    ui->lineEdit_3->setText(settingName);
+                    ui->Custom3->setVisible(true);
+                    ui->Custom3_Text->setVisible(true);
+                    ui->lineEdit_3->setVisible(true);
+                    
+                    // Extract the value for this setting
+                    QRegularExpression customPattern(QString(R"(P1_%1\s*=\s*cmw\s+1\s+(.*?)(?=\r?\n|$))").arg(settingName));
+                    auto customMatch = customPattern.match(iniContent);
+                    if (customMatch.hasMatch()) {
+                        ui->Custom3_Text->setPlainText(customMatch.captured(1).trimmed());
+                    }
+                }
+                // If all custom fields are used, log that we can't display more
+                else {
+                    qDebug() << "No more custom fields available for" << settingName;
+                }
+            }
+        }
+
+        // Extract specific parameters for the UI controls
+        // Update Recoil settings if they're visible
+        if (ui->Recoil->isVisible()) {
+            auto recoilMatch = recoilRegex.match(iniContent);
+            if (recoilMatch.hasMatch()) {
+                QString value = recoilMatch.captured(1).trimmed();
+                ui->Recoil_Text->setPlainText(value);
+                if (value == "F0x2x1") ui->Recoil->setCurrentText("Solenoid Single Pulse (recommended)");
+                else if (value == "F0x%s%") ui->Recoil->setCurrentText("Solenoid Switching");
+                else if (value == "F1x2x1") ui->Recoil->setCurrentText("Rumble Single Pulse (recommended for rumble)");
+                else if (value == "F1x%s%") ui->Recoil->setCurrentText("Rumble Switching");
+                else { ui->Recoil->setCurrentText("Custom"); ui->Recoil_Text->setPlainText(value); }
+            } else {
+                ui->Recoil_Text->clear();
+                ui->Recoil->setCurrentText("------");
+            }
+        }
+
+        // Update Damage settings if they're visible
+        if (ui->Damage->isVisible()) {
+            auto damageMatch = damageRegex.match(iniContent);
+            if (damageMatch.hasMatch()) {
+                QString value = damageMatch.captured(1).trimmed();
+                ui->Damage_Text->setPlainText(value);
+                if (value == "F1x2x1") ui->Damage->setCurrentText("Rumble Single Pulse (recommended)");
+                else if (value == "F1x%s%") ui->Damage->setCurrentText("Rumble Switching");
+                else { ui->Damage->setCurrentText("Custom"); ui->Damage_Text->setPlainText(value); }
+            } else {
+                ui->Damage_Text->clear();
+                ui->Damage->setCurrentText("------");
+            }
+        }
+
+        // Update Clip settings if they're visible
+        if (ui->Clip->isVisible()) {
+            auto clipMatch = clipRegex.match(iniContent);
+            if (clipMatch.hasMatch()) {
+                QString value = clipMatch.captured(1).trimmed();
+                ui->Clip_Text->setPlainText(value);
+                if (value == "XX") ui->Clip->setCurrentText("Red/Off");
+                else { ui->Clip->setCurrentText("Custom"); ui->Clip_Text->setPlainText(value); }
+            } else {
+                ui->Clip_Text->clear();
+                ui->Clip->setCurrentText("------");
+            }
+        }
+
+        // Update Ammo settings if they're visible
+        if (ui->Ammo->isVisible()) {
+            auto ammoMatch = ammoRegex.match(iniContent);
+            if (ammoMatch.hasMatch()) {
+                QString value = ammoMatch.captured(1).trimmed();
+                ui->Ammo_Text->setPlainText(value);
+                if (value == "DFAx%s%") ui->Ammo->setCurrentText("OLED On");
+                else { ui->Ammo->setCurrentText("Custom"); ui->Ammo_Text->setPlainText(value); }
+            } else {
+                ui->Ammo_Text->clear();
+                ui->Ammo->setCurrentText("------");
+            }
+        }
+
+        // Update Life settings if they're visible
+        if (ui->Life->isVisible()) {
+            auto lifeMatch = lifeRegex.match(iniContent);
+            if (lifeMatch.hasMatch()) {
+                QString value = lifeMatch.captured(1).trimmed();
+                ui->Life_Text->setPlainText(value);
+                if (value == "XX") ui->Life->setCurrentText("OLED On");
+                else { ui->Life->setCurrentText("Custom"); ui->Life_Text->setPlainText(value); }
+            } else {
+                ui->Life_Text->clear();
+                ui->Life->setCurrentText("------");
+            }
+        }
+
+        // Update Credits settings
+        auto creditsMatch = creditsRegex.match(iniContent);
+        if (creditsMatch.hasMatch()) {
+            QString value = creditsMatch.captured(1).trimmed();
+            ui->Credits_Text->setPlainText(value);
+            if (value == "XX") ui->Credits->setCurrentText("OLED On (coming soon)");
+            else { ui->Credits->setCurrentText("Custom"); ui->Credits_Text->setPlainText(value); }
+        } else {
+            ui->Credits_Text->clear();
+            ui->Credits->setCurrentText("------");
+        }
+    }
+    
+    // Reset the loading flag after loading is complete
+    isLoadingIni = false;
+    
+    // Force update of all combo boxes to ensure UI is consistent
+    updateAllComboBoxes();
+
+    // Update the player color dropdowns from LmpStart commands in the INI file
+    for (int player = 1; player <= playerCount; player++) {
+        QComboBox* playerColor = nullptr;
+        if (player == 1) playerColor = ui->P1Color;
+        else if (player == 2) playerColor = ui->P2Color;
+        else if (player == 3) playerColor = ui->P3Color;
+        else if (player == 4) playerColor = ui->P4Color;
+        
+        if (playerColor && playerColor->isEnabled()) {
+            // Define regex pattern to extract RGB values from LmpStart command
+            QRegularExpression lmpPattern(QString(R"(P%1_LmpStart\s*=\s*cmw\s+%1\s+F2x1x(\d+)xF3x1x(\d+)xF4x1x(\d+))").arg(player));
+            auto lmpMatch = lmpPattern.match(iniContent);
+            
+            if (lmpMatch.hasMatch()) {
+                // Extract RGB values from the LmpStart command
+                int red = lmpMatch.captured(1).toInt();
+                int green = lmpMatch.captured(2).toInt();
+                int blue = lmpMatch.captured(3).toInt();
+                QColor color(red, green, blue);
+                
+                qDebug() << QString("Found Player %1 color: RGB(%2,%3,%4)").arg(player).arg(red).arg(green).arg(blue);
+                
+                // Find the matching color in the dropdown
+                bool foundColor = false;
+                for (int i = 0; i < playerColor->count(); i++) {
+                    QColor itemColor = playerColor->itemData(i).value<QColor>();
+                    if (itemColor.red() == red && itemColor.green() == green && itemColor.blue() == blue) {
+                        playerColor->setCurrentIndex(i);
+                        foundColor = true;
+                        break;
+                    }
+                }
+                
+                // If exact color not found, set to closest color or add a custom color option
+                if (!foundColor && playerColor->count() > 0) {
+                    // Add custom color option if it doesn't exactly match
+                    // Use the first entry for now (default "------" option)
+                    playerColor->setCurrentIndex(0);
+                }
+            } else {
+                // If no LmpStart command found, set to default (first item in dropdown)
+                playerColor->setCurrentIndex(0);
+            }
+        }
+    }
+}
+
+void MainWindow::updateTextBox(const QString &text) {
+    Q_UNUSED(text); // Placeholder for text box updates.
+}
+
+void MainWindow::refreshIni() {
+    QString romName = ui->romComboBox->currentText();
+    if (!romName.isEmpty()) {
+        // Reset UI state before reloading
+        setupDefaultIni();
+        
+        // Load the INI for the selected ROM
+        loadIniSettings(romName);
+        
+        qDebug() << "INI file refreshed for ROM:" << romName;
+    } else {
+        qDebug() << "No ROM selected to refresh INI.";
+    }
+}
+
+// Add this function after loadIniSettings
+
+void MainWindow::updateAllComboBoxes() {
+    // Make sure all dropdowns are properly set based on their current values
+    // This helps ensure the UI state matches the INI file settings
+    
+    // Update the player color dropdowns from LmpStart commands in the INI
+    if (hasLoadedIni && !originalIniContent.isEmpty()) {
+        // Get the max player count
+        int playerCount = 1;
+        if (ui->P4Color->isEnabled()) playerCount = 4;
+        else if (ui->P3Color->isEnabled()) playerCount = 3;
+        else if (ui->P2Color->isEnabled()) playerCount = 2;
+        
+        for (int player = 1; player <= playerCount; player++) {
+            QComboBox* playerColor = nullptr;
+            if (player == 1) playerColor = ui->P1Color;
+            else if (player == 2) playerColor = ui->P2Color;
+            else if (player == 3) playerColor = ui->P3Color;
+            else if (player == 4) playerColor = ui->P4Color;
+            
+            if (playerColor && playerColor->isEnabled()) {
+                // Define regex pattern to extract RGB values from LmpStart command
+                QRegularExpression lmpPattern(QString(R"(P%1_LmpStart\s*=\s*cmw\s+%1\s+F2x1x(\d+)xF3x1x(\d+)xF4x1x(\d+))").arg(player));
+                auto lmpMatch = lmpPattern.match(originalIniContent);
+                
+                if (lmpMatch.hasMatch()) {
+                    // Extract RGB values from the LmpStart command
+                    int red = lmpMatch.captured(1).toInt();
+                    int green = lmpMatch.captured(2).toInt();
+                    int blue = lmpMatch.captured(3).toInt();
+                    QColor color(red, green, blue);
+                    
+                    qDebug() << QString("Found Player %1 color: RGB(%2,%3,%4)").arg(player).arg(red).arg(green).arg(blue);
+                    
+                    // Find the matching color in the dropdown
+                    bool foundColor = false;
+                    for (int i = 0; i < playerColor->count(); i++) {
+                        QColor itemColor = playerColor->itemData(i).value<QColor>();
+                        if (itemColor.red() == red && itemColor.green() == green && itemColor.blue() == blue) {
+                            playerColor->setCurrentIndex(i);
+                            foundColor = true;
+                            break;
+                        }
+                    }
+                    
+                    // If exact color not found, set to closest color or add a custom color option
+                    if (!foundColor && playerColor->count() > 0) {
+                        // Add custom color option if it doesn't exactly match
+                        // Use the first entry for now (default "------" option)
+                        playerColor->setCurrentIndex(0);
+                    }
+                } else {
+                    // If no LmpStart command found, set to default (first item in dropdown)
+                    playerColor->setCurrentIndex(0);
+                }
+            }
+        }
+    }
+    
+    // Manually trigger update signals for all relevant combo boxes
+    // Device Output Mode
+    QString deviceText = ui->DeviceOutputMode->currentText();
+    if (deviceText.contains("M0x")) {
+        qDebug() << "Updating Device Mode dropdown to:" << deviceText;
+        
+        // Select an item if it's not already selected
+        for (int i = 0; i < ui->DeviceOutputMode->count(); i++) {
+            if (ui->DeviceOutputMode->itemText(i).contains(deviceText.left(4))) {
+                ui->DeviceOutputMode->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+    
+    // Offscreen Firing Mode
+    QString offscreenText = ui->OffscreenFiringMode->currentText();
+    if (offscreenText.contains("M1x")) {
+        qDebug() << "Updating Offscreen Mode dropdown to:" << offscreenText;
+        
+        // Select an item if it's not already selected
+        for (int i = 0; i < ui->OffscreenFiringMode->count(); i++) {
+            if (ui->OffscreenFiringMode->itemText(i).contains(offscreenText.left(4))) {
+                ui->OffscreenFiringMode->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+    
+    // Pedal Mapping
+    QString pedalText = ui->PedalMapping->currentText();
+    if (pedalText.contains("M2x")) {
+        qDebug() << "Updating Pedal Mode dropdown to:" << pedalText;
+        
+        // Select an item if it's not already selected
+        for (int i = 0; i < ui->PedalMapping->count(); i++) {
+            if (ui->PedalMapping->itemText(i).contains(pedalText.left(4))) {
+                ui->PedalMapping->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+    
+    // Aspect Ratio Correction
+    QString aspectText = ui->AspectRatioCorrection->currentText();
+    if (aspectText.contains("M3x")) {
+        qDebug() << "Updating Aspect Ratio dropdown to:" << aspectText;
+        
+        // Select an item if it's not already selected
+        for (int i = 0; i < ui->AspectRatioCorrection->count(); i++) {
+            if (ui->AspectRatioCorrection->itemText(i).contains(aspectText.left(4))) {
+                ui->AspectRatioCorrection->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+    
+    // Rumble Only Mode
+    QString rumbleText = ui->RumbleOnlyMode->currentText();
+    if (rumbleText.contains("M6x")) {
+        qDebug() << "Updating Rumble Mode dropdown to:" << rumbleText;
+        
+        // Select an item if it's not already selected
+        for (int i = 0; i < ui->RumbleOnlyMode->count(); i++) {
+            if (ui->RumbleOnlyMode->itemText(i).contains(rumbleText.left(4))) {
+                ui->RumbleOnlyMode->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+    
+    // Auto Fire Mode
+    QString autoFireText = ui->AutoFireMode->currentText();
+    if (autoFireText.contains("M8x")) {
+        qDebug() << "Updating Auto Fire Mode dropdown to:" << autoFireText;
+        
+        // Select an item if it's not already selected
+        for (int i = 0; i < ui->AutoFireMode->count(); i++) {
+            if (ui->AutoFireMode->itemText(i).contains(autoFireText.left(4))) {
+                ui->AutoFireMode->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+    
+    // Display Mode
+    QString displayText = ui->DisplayMode->currentText();
+    if (displayText.contains("MDx")) {
+        qDebug() << "Updating Display Mode dropdown to:" << displayText;
+        
+        // Select an item if it's not already selected
+        for (int i = 0; i < ui->DisplayMode->count(); i++) {
+            if (ui->DisplayMode->itemText(i).contains(displayText.left(5))) {
+                ui->DisplayMode->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+    
+    // Start Commands
+    QString startText = ui->StartCommands->currentText();
+    if (startText.contains("S")) {
+        qDebug() << "Updating Start Commands dropdown to:" << startText;
+        
+        // Get just the S command part (S0, S1, etc.)
+        QString sCommand = "";
+        for (int i = 0; i < startText.length(); i++) {
+            if (startText[i] == 'S' && i+1 < startText.length() && startText[i+1].isDigit()) {
+                sCommand = startText.mid(i, 2);
+                break;
+            }
+        }
+        
+        // Select an item if it's not already selected
+        for (int i = 0; i < ui->StartCommands->count(); i++) {
+            if (ui->StartCommands->itemText(i).contains(sCommand)) {
+                ui->StartCommands->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+}
