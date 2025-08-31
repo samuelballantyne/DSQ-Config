@@ -1,0 +1,32 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Configure CMake
+        run: cmake -S . -B build
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          host: windows
+          target: desktop
+          arch: win64_msvc2019_64
+      - name: Configure CMake
+        run: cmake -S . -B build -A x64 -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Upload executable
+        uses: actions/upload-artifact@v3
+        with:
+          name: DemulEASY-windows
+          path: build/Release/DemulEASY.exe
