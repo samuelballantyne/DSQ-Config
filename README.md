@@ -58,6 +58,17 @@ DemulEasy is a straightforward, automated tool designed to simplify the configur
 
 A GitHub Actions workflow builds the project on Windows and packages the executable with its required Qt libraries. The workflow uploads a zipped artifact for download.
 
+## Building from Source
+
+To build the application locally, install the Qt 6 development libraries and point CMake to the Qt package directory, for example:
+
+```powershell
+cmake -S . -B build -DCMAKE_PREFIX_PATH="C:/Qt/6.5.3/msvc2019_64/lib/cmake"
+cmake --build build
+```
+
+Adjust the path to match your Qt installation. On macOS or Linux, use the appropriate Qt package path instead.
+
 ## Contributing
 
 Contributions are welcome! If you’d like to improve DemulEasy, please feel free to fork the repository and submit a pull request.
