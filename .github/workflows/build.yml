@@ -1,0 +1,13 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Configure CMake
+        run: cmake -S . -B build
