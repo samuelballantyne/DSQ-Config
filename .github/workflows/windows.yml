@@ -10,7 +10,7 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: jurplel/install-qt-action@v3
         with:
           version: 6.5.3
@@ -26,7 +26,7 @@ jobs:
           windeployqt --dir build/package build/DemulEASY.exe
           Compress-Archive -Path build/package/* -DestinationPath DemulEASY-win64.zip
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: DemulEASY-win64
           path: DemulEASY-win64.zip
