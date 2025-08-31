@@ -205,7 +205,7 @@ void MainWindow::setupSignalConnections() {
     connect(ui->emulatorComboBox, &QComboBox::currentTextChanged, this, &MainWindow::updateEmulatorPath);
 
     // Export and Launch button signals.
-    connect(ui->exportButton, &QPushButton::clicked, this, &MainWindow::exportFiles);
+    connect(ui->exportButton, &QPushButton::clicked, this, [this]() { exportFiles(); });
     connect(ui->LaunchButton, &QPushButton::clicked, this, &MainWindow::launchGame);
 
     // Browse button signals.
@@ -795,7 +795,7 @@ void MainWindow::createFiles(const QString &rom,
     }
 }
 
-void MainWindow::exportFiles()
+bool MainWindow::exportFiles(bool showMessage)
 {
     QString emulator = ui->emulatorComboBox->currentText();
     QString emulatorPath = ui->emulatorPathLineEdit->text();
@@ -805,19 +805,24 @@ void MainWindow::exportFiles()
     QString demulShooterPath = ui->demulShooterPathLineEdit->text();
     QString verbose = (ui->verboseComboBox->currentText() == "Yes") ? "-v" : "";
     QString iniContent = ui->plainTextEdit_Generic->toPlainText();
-    
+
     // Check for Windows paths on non-Windows platforms
     #ifndef Q_OS_WIN
     if (qmamehookerPath.startsWith("C:/") || qmamehookerPath.startsWith("C:\\")) {
         QMessageBox::warning(this, "Path Warning",
-                            "You're using Windows-style paths (C:/) on a non-Windows system.\n"
-                            "Please use paths appropriate for your operating system.");
-        return;
+                             "You're using Windows-style paths (C:/) on a non-Windows system.\n"
+                             "Please use paths appropriate for your operating system.");
+        qWarning() << "Export failed due to invalid path format.";
+        return false;
     }
     #endif
-    
+
     createFiles(rom, emulator, QString(), emulatorPath, romPath, qmamehookerPath, demulShooterPath, verbose, iniContent);
-    QMessageBox::information(this, "Export", "Batch and INI files have been successfully exported.");
+
+    if (showMessage)
+        QMessageBox::information(this, "Export", "Batch and INI files have been successfully exported.");
+
+    return true;
 }
 
 void MainWindow::updateGamesList()
@@ -2021,7 +2026,12 @@ void MainWindow::showTextEditorContextMenu(const QPoint &pos)
 void MainWindow::launchGame()
 {
     // First export the files
-    exportFiles();
+    if (!exportFiles(false)) {
+        QMessageBox::warning(this, "Export Error",
+                             "Failed to export files; game launch aborted.");
+        qWarning() << "Export failed; game launch aborted.";
+        return;
+    }
 
     // Get the current ROM name and create the BAT file path
     QString rom = ui->romComboBox->currentText();
