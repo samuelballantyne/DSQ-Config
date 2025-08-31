@@ -19,7 +19,7 @@ public:
     ~MainWindow();
 
 private slots:
-    void exportFiles();
+    bool exportFiles(bool showMessage = true);
     void updateGamesList();
     void browseQmamehookerPath();
     void browseEmulatorPath();

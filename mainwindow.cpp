@@ -205,7 +205,7 @@ void MainWindow::setupSignalConnections() {
     connect(ui->emulatorComboBox, &QComboBox::currentTextChanged, this, &MainWindow::updateEmulatorPath);
 
     // Export and Launch button signals.
-    connect(ui->exportButton, &QPushButton::clicked, this, &MainWindow::exportFiles);
+    connect(ui->exportButton, &QPushButton::clicked, this, [this]() { exportFiles(); });
     connect(ui->LaunchButton, &QPushButton::clicked, this, &MainWindow::launchGame);
 
     // Browse button signals.
@@ -795,7 +795,7 @@ void MainWindow::createFiles(const QString &rom,
     }
 }
 
-void MainWindow::exportFiles()
+bool MainWindow::exportFiles(bool showMessage)
 {
     QString emulator = ui->emulatorComboBox->currentText();
     QString emulatorPath = ui->emulatorPathLineEdit->text();
@@ -805,19 +805,26 @@ void MainWindow::exportFiles()
     QString demulShooterPath = ui->demulShooterPathLineEdit->text();
     QString verbose = (ui->verboseComboBox->currentText() == "Yes") ? "-v" : "";
     QString iniContent = ui->plainTextEdit_Generic->toPlainText();
-    
+
     // Check for Windows paths on non-Windows platforms
     #ifndef Q_OS_WIN
-    if (qmamehookerPath.startsWith("C:/") || qmamehookerPath.startsWith("C:\\")) {
-        QMessageBox::warning(this, "Path Warning",
-                            "You're using Windows-style paths (C:/) on a non-Windows system.\n"
-                            "Please use paths appropriate for your operating system.");
-        return;
+    if (qmamehookerPath.startsWith("C:/") || qmamehookerPath.startsWith("C\\")) {
+        if (showMessage) {
+            QMessageBox::warning(this, "Path Warning",
+                                 "You're using Windows-style paths (C:/) on a non-Windows system.\n"
+                                 "Please use paths appropriate for your operating system.");
+        } else {
+            qWarning() << "Path Warning: Windows-style path on non-Windows system";
+        }
+        return false;
     }
     #endif
-    
+
     createFiles(rom, emulator, QString(), emulatorPath, romPath, qmamehookerPath, demulShooterPath, verbose, iniContent);
-    QMessageBox::information(this, "Export", "Batch and INI files have been successfully exported.");
+    if (showMessage) {
+        QMessageBox::information(this, "Export", "Batch and INI files have been successfully exported.");
+    }
+    return true;
 }
 
 void MainWindow::updateGamesList()
@@ -2020,18 +2027,28 @@ void MainWindow::showTextEditorContextMenu(const QPoint &pos)
 // Add the launchGame implementation at the end of the file
 void MainWindow::launchGame()
 {
-    // First export the files
-    exportFiles();
+    // First export the files so batch/INI are up to date
+    if (!exportFiles(false)) {
+        QMessageBox::warning(this, "Launch Error", "Failed to export required files.");
+        return;
+    }
 
-    // Get the current ROM name and create the BAT file path
+    // Construct the BAT file path using QDir for portability
     QString rom = ui->romComboBox->currentText();
-    QString rom2 = EmulatorUtils::mapRom(rom);
     QString qmamehookerPath = ui->qmamehookerPathLineEdit->text();
-    QString batFilePath = qmamehookerPath + "/bat/" + rom + ".bat";
+    QDir batDir(QDir(qmamehookerPath).filePath("bat"));
+    QString batFilePath = batDir.filePath(rom + ".bat");
+
+    // Verify the BAT file exists before attempting to launch
+    if (!QFile::exists(batFilePath)) {
+        QMessageBox::warning(this, "Launch Error",
+                             QString("Batch file not found: %1").arg(batFilePath));
+        return;
+    }
 
     // Launch the BAT file
     QProcess *process = new QProcess(this);
-    process->setWorkingDirectory(QFileInfo(batFilePath).absolutePath());
+    process->setWorkingDirectory(batDir.absolutePath());
     
     #ifdef Q_OS_WIN
     // On Windows, use cmd.exe to run the batch file

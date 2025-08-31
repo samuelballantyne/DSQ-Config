@@ -1,0 +1,34 @@
+name: Build Windows app
+
+on:
+  push:
+    branches: [ work, main ]
+  pull_request:
+    branches: [ work, main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.5.3
+          host: windows
+          target: desktop
+          arch: win64_msvc2019_64
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Configure
+        run: cmake -S . -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DQt6_DIR="${{ env.Qt6_DIR }}" -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl
+      - name: Build
+        run: cmake --build build
+      - name: Deploy Qt dependencies
+        run: |
+          windeployqt --dir build/package build/DemulEASY.exe
+          Compress-Archive -Path build/package/* -DestinationPath DemulEASY-win64.zip
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DemulEASY-win64
+          path: DemulEASY-win64.zip
