@@ -4,6 +4,8 @@
 #include <QFont>
 #include <QComboBox>
 #include <QRegularExpression>
+#include <QHash>
+#include <QPair>
 
 
 EmulatorUtils::EmulatorUtils()

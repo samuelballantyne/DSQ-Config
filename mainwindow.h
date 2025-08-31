@@ -4,6 +4,9 @@
 #include <QMainWindow>
 #include <QDir>
 #include <QRegularExpression>
+#include <QColor>
+#include <QStringList>
+#include <QPoint>
 #include "emulatorutils.h"
 
 namespace Ui {
@@ -19,7 +22,7 @@ public:
     ~MainWindow();
 
 private slots:
-    void exportFiles();
+    bool exportFiles(bool showMessage = true);
     void updateGamesList();
     void browseQmamehookerPath();
     void browseEmulatorPath();
