@@ -54,6 +54,10 @@ DemulEasy is a straightforward, automated tool designed to simplify the configur
 - **Enhanced Features:**  
   Based on user feedback, future updates may include more advanced customization options and additional functionalities.
 
+## Continuous Integration
+
+A GitHub Actions workflow builds the project on Windows and packages the executable with its required Qt libraries. The workflow uploads a zipped artifact for download.
+
 ## Contributing
 
 Contributions are welcome! If you’d like to improve DemulEasy, please feel free to fork the repository and submit a pull request.

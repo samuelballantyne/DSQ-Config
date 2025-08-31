@@ -2020,18 +2020,25 @@ void MainWindow::showTextEditorContextMenu(const QPoint &pos)
 // Add the launchGame implementation at the end of the file
 void MainWindow::launchGame()
 {
-    // First export the files
+    // First export the files so batch/INI are up to date
     exportFiles();
 
-    // Get the current ROM name and create the BAT file path
+    // Construct the BAT file path using QDir for portability
     QString rom = ui->romComboBox->currentText();
-    QString rom2 = EmulatorUtils::mapRom(rom);
     QString qmamehookerPath = ui->qmamehookerPathLineEdit->text();
-    QString batFilePath = qmamehookerPath + "/bat/" + rom + ".bat";
+    QDir batDir(QDir(qmamehookerPath).filePath("bat"));
+    QString batFilePath = batDir.filePath(rom + ".bat");
+
+    // Verify the BAT file exists before attempting to launch
+    if (!QFile::exists(batFilePath)) {
+        QMessageBox::warning(this, "Launch Error",
+                             QString("Batch file not found: %1").arg(batFilePath));
+        return;
+    }
 
     // Launch the BAT file
     QProcess *process = new QProcess(this);
-    process->setWorkingDirectory(QFileInfo(batFilePath).absolutePath());
+    process->setWorkingDirectory(batDir.absolutePath());
     
     #ifdef Q_OS_WIN
     // On Windows, use cmd.exe to run the batch file
