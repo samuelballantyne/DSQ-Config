@@ -9,9 +9,12 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
+# Try to locate a real Qt installation first; fall back to local stubs
+find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets QUIET)
+if(NOT QT_FOUND)
+    list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+    find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
+endif()
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
 
 set(PROJECT_SOURCES
