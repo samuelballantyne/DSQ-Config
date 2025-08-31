@@ -1,32 +1,73 @@
-name: Build
+name: CMake - Windows 10+ Packages
 
 on:
   push:
   pull_request:
 
 jobs:
-  configure:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Configure CMake
-        run: cmake -S . -B build
-  windows:
+  build:
     runs-on: windows-latest
+
+    strategy:
+      # Ensure all matrix builds run to completion
+      fail-fast: false
+
+      matrix:
+        build_type: [Debug, Release]
+        win_arch: [win64_msvc2022_64, win64_mingw]
+        include:
+          - win_arch: win64_mingw
+            qt_tools: tools_mingw1310
+            cmake_gen: "MinGW Makefiles"
+            pretty: "Windows Artifact (MinGW)"
+          - win_arch: win64_msvc2022_64
+            cmake_gen: "Visual Studio 17 2022"
+            pretty: "Windows Artifact (MSVC)"
+        # MSVC uses a different layout for Debug and is omitted here
+        exclude:
+          - win_arch: win64_msvc2022_64
+            build_type: Debug
+
     steps:
       - uses: actions/checkout@v4
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v3
         with:
-          host: windows
-          target: desktop
-          arch: win64_msvc2019_64
+          submodules: true
+
+      - name: Get short SHA
+        id: get-short-sha
+        run: echo "id=$(git rev-parse --short HEAD)" >> $env:GITHUB_OUTPUT
+
+      # Use install-qt-action fork until upstream fixes land
+      - name: Install Qt6
+        uses: jdpurcell/install-qt-action@v5
+        with:
+          version: '6.8.3'
+          arch: '${{ matrix.win_arch }}'
+          modules: 'qtserialport'
+          tools: '${{ matrix.qt_tools }}'
+          archives: 'qtbase qttranslations qttools qtsvg icu'
+          cache: true
+
       - name: Configure CMake
-        run: cmake -S . -B build -A x64 -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
+        run: >
+          cmake -B "${{ github.workspace }}/build"
+          -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}"
+          -DDQE_GITHASH="${{ steps.get-short-sha.outputs.id }}"
+          -G "${{ matrix.cmake_gen }}"
+          -S "${{ github.workspace }}"
+
       - name: Build
-        run: cmake --build build --config Release
-      - name: Upload executable
+        run: cmake --build ${{ github.workspace }}/build --config ${{ matrix.build_type }} --parallel
+
+      - name: Deploy Windows App & Libraries
+        run: |
+          cmake --install "${{ github.workspace }}/build" --prefix "${{ github.workspace }}/build/out" --strip
+          windeployqt "${{ github.workspace }}/build/out/bin/DemulEASY.exe" --no-translations --no-system-d3d-compiler --no-opengl-sw --no-network --exclude-plugins qnetworklistmanager,qtuiotouchplugin,qsvgicon,qcertonlybackend,qchannelbackend
+          mv "${{ github.workspace }}/build/out/bin" "${{ github.workspace }}/build/out/DemulEASY"
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DemulEASY-windows
-          path: build/Release/DemulEASY.exe
+          name: DemulEASY-${{ matrix.pretty }}-Qt6-${{ matrix.build_type }}
+          path: build/out
+
