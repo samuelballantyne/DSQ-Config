@@ -4,6 +4,7 @@
 #include <QSyntaxHighlighter>
 #include <QRegularExpression>
 #include <QTextCharFormat>
+#include <QVector>
 
 class IniSyntaxHighlighter : public QSyntaxHighlighter
 {
