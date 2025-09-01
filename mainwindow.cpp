@@ -16,6 +16,7 @@
 #include <QIcon>
 #include <QVariant>
 #include <QProcess>
+#include <QtGlobal>
 
 // Global color definitions.
 QColor customRed(255, 0, 0);      // Red using RGB values
@@ -609,6 +610,7 @@ void MainWindow::updateLmpStartValue(int player, const QColor &color) {
 void MainWindow::setupDefaultIni() {
     // Clear the text editor instead of setting a default INI
     ui->plainTextEdit_Generic->clear();
+    ui->plainTextEdit_Bat->clear();
     
     // Reset the loaded flag
     originalIniContent = "";
@@ -728,53 +730,29 @@ void MainWindow::createFiles(const QString &rom,
                              const QString &qmamehookerPath,
                              const QString &demulShooterPath,
                              const QString &verbose,
-                             const QString &iniContent)
+                             const QString &iniContent,
+                             const QString &batContent)
 {
     // Mapping and file creation logic remains unchanged.
-    QString emulator = emulatorInput;
-    QString demulShooterExe = demulShooterExeInput;
-    EmulatorUtils::mapEmulator(emulator, demulShooterExe);
-
+    Q_UNUSED(emulatorInput);
+    Q_UNUSED(demulShooterExeInput);
     QString rom2 = EmulatorUtils::mapRom(rom);
-    
     // Log the ROM mapping for debugging
     qDebug() << "ROM mapping:" << rom << "->" << rom2;
 
     QDir iniDir, batDir;
+    Q_UNUSED(emulatorPath);
+    Q_UNUSED(romPath);
+    Q_UNUSED(demulShooterPath);
+    Q_UNUSED(verbose);
     prepareDirectories(qmamehookerPath, iniDir, batDir);
     
-    // Use QDir to ensure platform-independent path handling
-    QString iniDirPath = iniDir.absolutePath();
-    QString batDirPath = batDir.absolutePath();
-
-    QFileInfo emulatorFileInfo(emulatorPath);
-    QString emulatorDirectory = emulatorFileInfo.absolutePath();
-    QString emulatorExecutable = emulatorFileInfo.fileName();
-
-    // Create the BAT file with platform-independent path handling
+    // Create the BAT file with provided content
     QString batFilePath = batDir.filePath(rom + ".bat");
     QFile batFile(batFilePath);
-    
     if (batFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
         QTextStream out(&batFile);
-        
-        // Windows batch file commands
-        out << "start \"Demul\" \"" << QDir::toNativeSeparators(demulShooterPath + "/" + demulShooterExe)
-            << "\" -target=" << emulator
-            << " -rom=" << rom2 << "\n";
-        out << "start /MIN \"Hooker\" \"" << QDir::toNativeSeparators(qmamehookerPath + "/QMamehook.exe")
-            << "\" -p \"" << QDir::toNativeSeparators(iniDirPath) << "\" " << verbose << " -c \n";
-        out << "cd \"" << QDir::toNativeSeparators(emulatorDirectory) << "\"\n";
-        
-        if (emulator == "flycast") {
-            out << "start \"" << emulator << "\" " << emulatorExecutable
-                << " -config window:fullscreen=yes \"" << QDir::toNativeSeparators(romPath + "/" + rom2 + ".zip") << "\"";
-        } else if (emulator == "lindbergh" || emulator == "ringwide" || emulator == "rawthrill") {
-            out << "start \"" << emulator << "\" " << emulatorExecutable << " --profile=" << rom2 + ".xml";
-        } else {
-            out << "start \"" << emulator << "\" " << emulatorExecutable << " " << rom2;
-        }
-        
+        out << batContent;
         batFile.close();
         qDebug() << "Batch file created at:" << batFilePath;
     } else {
@@ -795,6 +773,49 @@ void MainWindow::createFiles(const QString &rom,
     }
 }
 
+QString MainWindow::generateBatContent(const QString &rom,
+                                       const QString &emulatorInput,
+                                       QString demulShooterExeInput,
+                                       const QString &emulatorPath,
+                                       const QString &romPath,
+                                       const QString &qmamehookerPath,
+                                       const QString &demulShooterPath,
+                                       const QString &verbose)
+{
+    QString emulator = emulatorInput;
+    QString demulShooterExe = demulShooterExeInput;
+    EmulatorUtils::mapEmulator(emulator, demulShooterExe);
+    QString rom2 = EmulatorUtils::mapRom(rom);
+
+    QDir iniDir, batDir;
+    prepareDirectories(qmamehookerPath, iniDir, batDir);
+
+    QString iniDirPath = iniDir.absolutePath();
+    QFileInfo emulatorFileInfo(emulatorPath);
+    QString emulatorDirectory = emulatorFileInfo.absolutePath();
+    QString emulatorExecutable = emulatorFileInfo.fileName();
+
+    QString content;
+    QTextStream out(&content);
+    out << "start \"Demul\" \"" << QDir::toNativeSeparators(demulShooterPath + "/" + demulShooterExe)
+        << "\" -target=" << emulator
+        << " -rom=" << rom2 << "\n";
+    out << "start /MIN \"Hooker\" \"" << QDir::toNativeSeparators(qmamehookerPath + "/QMamehook.exe")
+        << "\" -p \"" << QDir::toNativeSeparators(iniDirPath) << "\" " << verbose << " -c \n";
+    out << "cd \"" << QDir::toNativeSeparators(emulatorDirectory) << "\"\n";
+
+    if (emulator == "flycast") {
+        out << "start \"" << emulator << "\" " << emulatorExecutable
+            << " -config window:fullscreen=yes \"" << QDir::toNativeSeparators(romPath + "/" + rom2 + ".zip") << "\"";
+    } else if (emulator == "lindbergh" || emulator == "ringwide" || emulator == "rawthrill") {
+        out << "start \"" << emulator << "\" " << emulatorExecutable << " --profile=" << rom2 + ".xml";
+    } else {
+        out << "start \"" << emulator << "\" " << emulatorExecutable << " " << rom2;
+    }
+
+    return content;
+}
+
 bool MainWindow::exportFiles(bool showMessage)
 {
     QString emulator = ui->emulatorComboBox->currentText();
@@ -805,6 +826,7 @@ bool MainWindow::exportFiles(bool showMessage)
     QString demulShooterPath = ui->demulShooterPathLineEdit->text();
     QString verbose = (ui->verboseComboBox->currentText() == "Yes") ? "-v" : "";
     QString iniContent = ui->plainTextEdit_Generic->toPlainText();
+    QString batContent = ui->plainTextEdit_Bat->toPlainText();
 
     // Check for Windows paths on non-Windows platforms
     #ifndef Q_OS_WIN
@@ -817,7 +839,7 @@ bool MainWindow::exportFiles(bool showMessage)
     }
     #endif
 
-    createFiles(rom, emulator, QString(), emulatorPath, romPath, qmamehookerPath, demulShooterPath, verbose, iniContent);
+    createFiles(rom, emulator, QString(), emulatorPath, romPath, qmamehookerPath, demulShooterPath, verbose, iniContent, batContent);
 
     if (showMessage)
         QMessageBox::information(this, "Export", "Batch and INI files have been successfully exported.");
@@ -835,6 +857,7 @@ void MainWindow::updateGamesList()
     originalIniContent = "";
     hasLoadedIni = false;
     ui->plainTextEdit_Generic->clear();
+    ui->plainTextEdit_Bat->clear();
     
     // Set player controls (only Player 1 enabled by default)
     ui->P1Color->setEnabled(true);
@@ -1243,6 +1266,7 @@ void MainWindow::loadIniSettings(const QString &romName)
     originalIniContent = "";
     hasLoadedIni = false;
     ui->plainTextEdit_Generic->clear();
+    ui->plainTextEdit_Bat->clear();
 
     // Always hide custom fields - they will be edited in the text editor
     ui->lineEdit->setVisible(false);
@@ -1294,6 +1318,26 @@ void MainWindow::loadIniSettings(const QString &romName)
 
     // Load the INI file content
     ui->plainTextEdit_Generic->setPlainText(iniContent);
+
+    // Load or generate BAT file content
+    QString batPath = qmamehookerPath + "/bat/" + rom2 + ".bat";
+    QString batContent;
+    QFile batFile(batPath);
+    if (batFile.exists() && batFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        batContent = batFile.readAll();
+        batFile.close();
+    } else {
+        QString verbose = (ui->verboseComboBox->currentText() == "Yes") ? "-v" : "";
+        batContent = generateBatContent(romName,
+                                        ui->emulatorComboBox->currentText(),
+                                        QString(),
+                                        ui->emulatorPathLineEdit->text(),
+                                        ui->romPathLineEdit->text(),
+                                        qmamehookerPath,
+                                        ui->demulShooterPathLineEdit->text(),
+                                        verbose);
+    }
+    ui->plainTextEdit_Bat->setPlainText(batContent);
 
     // Load General settings first
     int generalSectionPos = iniContent.indexOf("[General]");

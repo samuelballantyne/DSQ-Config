@@ -50,15 +50,24 @@ private:
     void prepareDirectories(const QString &basePath, QDir &iniDir, QDir &batDir);
     void mapEmulator(QString &emulator, QString &demulShooterExe);
     QString mapRom(const QString &rom);
-    void createFiles(const QString &rom,
-                     const QString &emulatorInput,
-                     QString demulShooterExeInput,
-                     const QString &emulatorPath,
-                     const QString &romPath,
-                     const QString &qmamehookerPath,
-                     const QString &demulShooterPath,
-                     const QString &verbose,
-                     const QString &iniContent);
+      void createFiles(const QString &rom,
+                       const QString &emulatorInput,
+                       QString demulShooterExeInput,
+                       const QString &emulatorPath,
+                       const QString &romPath,
+                       const QString &qmamehookerPath,
+                       const QString &demulShooterPath,
+                       const QString &verbose,
+                       const QString &iniContent,
+                       const QString &batContent);
+      QString generateBatContent(const QString &rom,
+                                 const QString &emulatorInput,
+                                 QString demulShooterExeInput,
+                                 const QString &emulatorPath,
+                                 const QString &romPath,
+                                 const QString &qmamehookerPath,
+                                 const QString &demulShooterPath,
+                                 const QString &verbose);
     void updateLmpStartValue(int player, const QColor &color);
     bool safeReplaceLine(QStringList &lines, const QString &key, const QString &newLine);
 

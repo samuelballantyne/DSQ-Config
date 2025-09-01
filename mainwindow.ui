@@ -302,20 +302,34 @@
       <property name="usesScrollButtons">
        <bool>true</bool>
       </property>
-      <widget class="QWidget" name="tab_Generic">
-       <attribute name="title">
-        <string>Generic</string>
-       </attribute>
-       <layout class="QVBoxLayout" name="verticalLayout_Generic">
-        <item>
-         <widget class="QPlainTextEdit" name="plainTextEdit_Generic">
-          <property name="placeholderText">
-           <string>Enter generic configuration here...</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </widget>
+     <widget class="QWidget" name="tab_Generic">
+      <attribute name="title">
+       <string>Settings ini</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_Generic">
+       <item>
+        <widget class="QPlainTextEdit" name="plainTextEdit_Generic">
+         <property name="placeholderText">
+          <string>Enter generic configuration here...</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_Executable">
+      <attribute name="title">
+       <string>Executable bat</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_Executable">
+       <item>
+        <widget class="QPlainTextEdit" name="plainTextEdit_Bat">
+         <property name="placeholderText">
+          <string>Enter executable configuration here...</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
       <widget class="QWidget" name="tab_OpenFIRE">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
