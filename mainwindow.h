@@ -67,7 +67,8 @@ private:
                                  const QString &romPath,
                                  const QString &qmamehookerPath,
                                  const QString &demulShooterPath,
-                                 const QString &verbose);
+                                 const QString &verbose,
+                                 const QString &demulShooterArgs);
     void updateLmpStartValue(int player, const QColor &color);
     bool safeReplaceLine(QStringList &lines, const QString &key, const QString &newLine);
 
@@ -79,9 +80,10 @@ private:
     void setupColorComboBoxes();
     void setupSignalConnections();
     void setupDefaultIni();
-    
+
     // New helper function to ensure comboboxes are properly set
     void updateAllComboBoxes();
+    void updateBatCommandLine();
 };
 
 #endif // MAINWINDOW_H
