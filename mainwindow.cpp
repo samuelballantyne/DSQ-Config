@@ -16,6 +16,7 @@
 #include <QIcon>
 #include <QVariant>
 #include <QProcess>
+#include <QLineEdit>
 #include <QtGlobal>
 
 // Global color definitions.
@@ -105,7 +106,7 @@ void MainWindow::setupComboBoxStyles() {
     boldFont.setBold(true);
     for (int i = 0; i < ui->emulatorComboBox->count(); ++i) {
         QString itemText = ui->emulatorComboBox->itemText(i);
-        if (itemText == "----DemulShooter----" || itemText == "----DemulShooter64----") {
+        if (itemText.startsWith("----") && itemText.endsWith("----")) {
             ui->emulatorComboBox->setItemData(i, boldFont, Qt::FontRole);
             ui->emulatorComboBox->setItemData(i, QVariant(0), Qt::UserRole - 1);
         }
@@ -214,6 +215,9 @@ void MainWindow::setupSignalConnections() {
     connect(ui->browseRomButton, &QPushButton::clicked, this, &MainWindow::browseRomPath);
     connect(ui->browseQmamehookerButton, &QPushButton::clicked, this, &MainWindow::browseQmamehookerPath);
     connect(ui->browseDemulButton, &QPushButton::clicked, this, &MainWindow::browseDemulPath);
+
+    // DemulShooter extra arguments
+    connect(ui->demulShooterArgsLineEdit, &QLineEdit::textChanged, this, &MainWindow::updateBatCommandLine);
 
     // INI update signals for various combo boxes.
     connect(ui->StartCommands, &QComboBox::currentTextChanged, this, &MainWindow::updateIniText);
@@ -780,7 +784,8 @@ QString MainWindow::generateBatContent(const QString &rom,
                                        const QString &romPath,
                                        const QString &qmamehookerPath,
                                        const QString &demulShooterPath,
-                                       const QString &verbose)
+                                       const QString &verbose,
+                                       const QString &demulShooterArgs)
 {
     QString emulator = emulatorInput;
     QString demulShooterExe = demulShooterExeInput;
@@ -799,7 +804,10 @@ QString MainWindow::generateBatContent(const QString &rom,
     QTextStream out(&content);
     out << "start \"Demul\" \"" << QDir::toNativeSeparators(demulShooterPath + "/" + demulShooterExe)
         << "\" -target=" << emulator
-        << " -rom=" << rom2 << "\n";
+        << " -rom=" << rom2;
+    if (!demulShooterArgs.trimmed().isEmpty())
+        out << ' ' << demulShooterArgs.trimmed();
+    out << "\n";
     out << "start /MIN \"Hooker\" \"" << QDir::toNativeSeparators(qmamehookerPath + "/QMamehook.exe")
         << "\" -p \"" << QDir::toNativeSeparators(iniDirPath) << "\" " << verbose << " -c \n";
     out << "cd \"" << QDir::toNativeSeparators(emulatorDirectory) << "\"\n";
@@ -858,6 +866,7 @@ void MainWindow::updateGamesList()
     hasLoadedIni = false;
     ui->plainTextEdit_Generic->clear();
     ui->plainTextEdit_Bat->clear();
+    ui->demulShooterArgsLineEdit->clear();
     
     // Set player controls (only Player 1 enabled by default)
     ui->P1Color->setEnabled(true);
@@ -1326,6 +1335,12 @@ void MainWindow::loadIniSettings(const QString &romName)
     if (batFile.exists() && batFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         batContent = batFile.readAll();
         batFile.close();
+        QStringList batLines = batContent.split('\n');
+        if (!batLines.isEmpty()) {
+            QRegularExpression argsRegex(R"(start\s+"Demul"\s+".*"\s+-target=[^\s]+\s+-rom=[^\s]+\s*(.*))", QRegularExpression::CaseInsensitiveOption);
+            auto match = argsRegex.match(batLines[0]);
+            if (match.hasMatch()) ui->demulShooterArgsLineEdit->setText(match.captured(1).trimmed());
+        }
     } else {
         QString verbose = (ui->verboseComboBox->currentText() == "Yes") ? "-v" : "";
         batContent = generateBatContent(romName,
@@ -1335,7 +1350,8 @@ void MainWindow::loadIniSettings(const QString &romName)
                                         ui->romPathLineEdit->text(),
                                         qmamehookerPath,
                                         ui->demulShooterPathLineEdit->text(),
-                                        verbose);
+                                        verbose,
+                                        ui->demulShooterArgsLineEdit->text());
     }
     ui->plainTextEdit_Bat->setPlainText(batContent);
 
@@ -1657,7 +1673,7 @@ void MainWindow::loadIniSettings(const QString &romName)
     }
 
     // Check if we need to hide any existing settings or add new ones
-    QStringList knownSettings = {"CtmRecoil", "Damaged", "Clip", "Ammo", "Life"};
+    QStringList knownSettings = {"CtmRecoil", "Damaged", "Clip", "Ammo", "Life", "Credits"};
 
     // Hide/disable settings that don't exist in the INI file
     for (const QString& setting : knownSettings) {
@@ -1686,6 +1702,10 @@ void MainWindow::loadIniSettings(const QString &romName)
                 ui->Life->setVisible(true);
                 ui->Life_Text->setVisible(true);
                 ui->Life_Label->setVisible(true);
+            } else if (setting == "Credits") {
+                ui->Credits->setVisible(true);
+                ui->Credits_Text->setVisible(true);
+                ui->Credits_Label->setVisible(true);
             }
         } else {
             // If the setting doesn't exist, hide the corresponding UI elements
@@ -1709,6 +1729,10 @@ void MainWindow::loadIniSettings(const QString &romName)
                 ui->Life->setVisible(false);
                 ui->Life_Text->setVisible(false);
                 ui->Life_Label->setVisible(false);
+            } else if (setting == "Credits") {
+                ui->Credits->setVisible(false);
+                ui->Credits_Text->setVisible(false);
+                ui->Credits_Label->setVisible(false);
             }
         }
     }
@@ -1809,6 +1833,8 @@ void MainWindow::loadIniSettings(const QString &romName)
         ui->Credits_Text->clear();
         ui->Credits->setCurrentText("------");
     }
+
+    updateAllComboBoxes();
 }
 
 void MainWindow::updateTextBox(const QString &text) {
@@ -1820,11 +1846,12 @@ void MainWindow::refreshIni() {
     if (!romName.isEmpty()) {
         // Reset UI state before reloading
         setupDefaultIni();
-        
+
         // Load the INI for the selected ROM
         loadIniSettings(romName);
-        
-        qDebug() << "INI file refreshed for ROM:" << romName;
+        updateAllComboBoxes();
+
+        qDebug() << "INI and BAT files refreshed for ROM:" << romName;
     } else {
         qDebug() << "No ROM selected to refresh INI.";
     }
@@ -2010,6 +2037,28 @@ void MainWindow::updateAllComboBoxes() {
                 break;
             }
         }
+    }
+}
+
+void MainWindow::updateBatCommandLine() {
+    QString emulatorFriendly = ui->emulatorComboBox->currentText();
+    QString emulator = emulatorFriendly;
+    QString demulShooterExe;
+    EmulatorUtils::mapEmulator(emulator, demulShooterExe);
+
+    QString rom = ui->romComboBox->currentText();
+    QString rom2 = EmulatorUtils::mapRom(rom);
+    QString demulShooterPath = ui->demulShooterPathLineEdit->text();
+    QString args = ui->demulShooterArgsLineEdit->text().trimmed();
+
+    QString line = QString("start \"Demul\" \"%1/%2\" -target=%3 -rom=%4")
+                       .arg(QDir::toNativeSeparators(demulShooterPath), demulShooterExe, emulator, rom2);
+    if (!args.isEmpty()) line += " " + args;
+
+    QStringList lines = ui->plainTextEdit_Bat->toPlainText().split('\n');
+    if (!lines.isEmpty()) {
+        lines[0] = line;
+        ui->plainTextEdit_Bat->setPlainText(lines.join('\n'));
     }
 }
 

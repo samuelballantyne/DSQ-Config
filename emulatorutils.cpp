@@ -459,21 +459,26 @@ void EmulatorUtils::updateEmulatorPath(const QString &emulator, QString &emulato
 void EmulatorUtils::setupEmulatorComboBox(QComboBox *box)
 {
     box->addItems({
-        "----DemulShooter----",
-        "Coastal", "Cxbx-Reloaded", "Demul 0.57 / 0.582 / 0.7a",
-        "Demul 0.582 and Above", "Demul 0.7a Only", "Dolphin x64 v5.0",
-        "GameWax Games", "Global VR Games", "KONAMI Arcade",
-        "Model2 Emulator v1.1a", "Namco ES4 Games", "P&P Marketing Arcade",
-        "RingEdge 2 Games", "SEGA Arcade (Plants vs Zombies)",
+        "----Demul----",
+        "Demul 0.57 / 0.582 / 0.7a",
+        "Demul 0.582 and Above",
+        "Demul 0.7a Only",
+        "----Sega Model 2----",
+        "Model2 Emulator v1.1a",
+        "----Flycast----",
+        "Flycast v2.0",
+        "----Windows----",
+        "Windows Games",
+        "Windows Games (64)",
+        "----Experimental----",
+        "Coastal", "Cxbx-Reloaded", "Dolphin x64 v5.0",
+        "Namco ES4 Games", "GameWax Games", "Global VR Games", "KONAMI Arcade",
+        "P&P Marketing Arcade", "RingEdge 2 Games", "SEGA Arcade (Plants vs Zombies)",
         "Taito Type X Games", "TeknoParrot Loader (Lindbergh)",
         "TeknoParrot Loader (Raw Thrill)", "TeknoParrot Loader (RingWide)",
-        "Windows Games",
-        "----DemulShooter64----",
-        "Adrenaline Amusements", "Flycast v2.0", "Namco ES3 System",
-        "Raw Thrill Arcade (64-bit)", "RPCS3 System 357",
-        "SEGA Amusement Linkage Live System", "Sega Nu",
-        "UNIS Technology", "United Distribution Company",
-        "Windows Games (64)"
+        "Adrenaline Amusements", "Namco ES3 System", "Raw Thrill Arcade (64-bit)",
+        "RPCS3 System 357", "SEGA Amusement Linkage Live System", "Sega Nu",
+        "UNIS Technology", "United Distribution Company"
     });
 
     box->setMaxVisibleItems(60);
