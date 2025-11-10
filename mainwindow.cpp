@@ -812,7 +812,11 @@ QString MainWindow::generateBatContent(const QString &rom,
         << "\" -p \"" << QDir::toNativeSeparators(iniDirPath) << "\" " << verbose << " -c \n";
     out << "cd \"" << QDir::toNativeSeparators(emulatorDirectory) << "\"\n";
 
-    if (emulator == "flycast") {
+    if (emulator == "demul07a") {
+        QString runTarget = EmulatorUtils::demulRunParameter(rom2);
+        out << "start \"demul07a\" \"" << emulatorExecutable << "\" -run=" << runTarget
+            << " -rom=" << rom2;
+    } else if (emulator == "flycast") {
         out << "start \"" << emulator << "\" " << emulatorExecutable
             << " -config window:fullscreen=yes \"" << QDir::toNativeSeparators(romPath + "/" + rom2 + ".zip") << "\"";
     } else if (emulator == "lindbergh" || emulator == "ringwide" || emulator == "rawthrill") {

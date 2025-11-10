@@ -1109,7 +1109,7 @@
     <item>
      <widget class="QPushButton" name="refreshIniButton">
       <property name="text">
-       <string>Refresh INI</string>
+       <string>Refresh</string>
       </property>
      </widget>
     </item>
