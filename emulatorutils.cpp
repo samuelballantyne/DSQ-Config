@@ -4,6 +4,7 @@
 #include <QFont>
 #include <QComboBox>
 #include <QRegularExpression>
+#include <QSet>
 
 
 EmulatorUtils::EmulatorUtils()
@@ -17,9 +18,7 @@ void EmulatorUtils::mapEmulator(QString &friendly, QString &demulShooterExe)
         /* ------- 32-bit DemulShooter.exe targets ------- */
         { "Coastal",                          {"coastal",    "DemulShooter.exe"} },
         { "Cxbx-Reloaded",                    {"chihiro",    "DemulShooter.exe"} },
-        { "Demul 0.57 / 0.582 / 0.7a",        {"demul057",   "DemulShooter.exe"} },
-        { "Demul 0.7a Only",                  {"demul07a",   "DemulShooter.exe"} },
-        { "Demul 0.582 and Above",            {"demul058",   "DemulShooter.exe"} },
+        { "Demul 0.7a",                       {"demul07a",   "DemulShooter.exe"} },
         { "Dolphin x64 v5.0",                 {"dolphin5",   "DemulShooter.exe"} },
         { "Namco ES4 Games",                  {"es4",        "DemulShooter.exe"} },
         { "GameWax Games",                    {"gamewax",    "DemulShooter.exe"} },
@@ -204,6 +203,19 @@ simplified.remove(QRegularExpression("[^a-z0-9]"));
     return simplified.isEmpty() ? "unknown" : simplified;
 }
 
+QString EmulatorUtils::demulRunParameter(const QString &romCode)
+{
+    static const QSet<QString> awaveRoms = {
+        "claychal",
+        "rangrmsn",
+        "sprtshot",
+        "xtrmhunt",
+        "xtrmhnt2"
+    };
+
+    return awaveRoms.contains(romCode) ? QStringLiteral("awave") : QStringLiteral("naomi");
+}
+
 void EmulatorUtils::updateGamesList(const QString &emuFriendly, QComboBox *romBox)
 {
     if (!romBox) return;
@@ -215,7 +227,7 @@ void EmulatorUtils::updateGamesList(const QString &emuFriendly, QComboBox *romBo
         { "Coastal",                     { "Wild West Shootout" } },
         { "Cxbx-Reloaded",               { "Virtua Cop 3" } },
 
-        { "Demul 0.57 / 0.582 / 0.7a",
+        { "Demul 0.7a",
             { "Confidential Mission",
               "Death Crimson OX (USA)", "Death Crimson OX (JAP)",
               "House of The Dead II (US)", "House of The Dead II",
@@ -226,14 +238,6 @@ void EmulatorUtils::updateGamesList(const QString &emuFriendly, QComboBox *romBo
               "Brave Fire Fighters", "Sega Clay Challenge", "Manic Panic Ghosts",
               "Pokasuka Ghosts", "Ranger Mission",
               "Extreme Hunting", "Extreme Hunting 2" } },
-
-        { "Demul 0.7a Only",
-            { "Brave Fire Fighters", "Sega Clay Challenge", "Manic Panic Ghosts",
-              "Pokasuka Ghosts", "Ranger Mission", "Extreme Hunting", "Extreme Hunting 2" } },
-
-        { "Demul 0.582 and Above",
-            { "Ninja Assault (World)", "Ninja Assault (Asia)",
-              "Ninja Assault (Japan)", "Ninja Assault (US)" } },
 
         { "Dolphin x64 v5.0",           { "Parameter not used" } },
 
@@ -315,7 +319,7 @@ void EmulatorUtils::updateEmulatorPath(const QString &emulator, QString &emulato
     } else if (emulator == "Cxbx-Reloaded") {
         emulatorPath = "C:/Cxbx-Reloaded/chihiro.exe";
         romPath = "C:/Cxbx-Reloaded/roms";
-    } else if (emulator == "Demul 0.57 / 0.582 / 0.7a" || emulator == "Demul 0.7a Only" || emulator == "Demul 0.582 and Above") {
+    } else if (emulator == "Demul 0.7a") {
         emulatorPath = "C:/Demul/demul.exe";
         romPath = "C:/Demul/roms";
     } else if (emulator == "Dolphin x64 v5.0") {
@@ -390,7 +394,7 @@ void EmulatorUtils::updateEmulatorPath(const QString &emulator, QString &emulato
     } else if (emulator == "Cxbx-Reloaded") {
         emulatorPath = appsDir + "/Cxbx-Reloaded/chihiro";
         romPath = gamesDir + "/Cxbx-Reloaded/roms";
-    } else if (emulator == "Demul 0.57 / 0.582 / 0.7a" || emulator == "Demul 0.7a Only" || emulator == "Demul 0.582 and Above") {
+    } else if (emulator == "Demul 0.7a") {
         emulatorPath = appsDir + "/Demul/demul";
         romPath = gamesDir + "/Demul/roms";
     } else if (emulator == "Dolphin x64 v5.0") {
@@ -460,9 +464,7 @@ void EmulatorUtils::setupEmulatorComboBox(QComboBox *box)
 {
     box->addItems({
         "----Demul----",
-        "Demul 0.57 / 0.582 / 0.7a",
-        "Demul 0.582 and Above",
-        "Demul 0.7a Only",
+        "Demul 0.7a",
         "----Sega Model 2----",
         "Model2 Emulator v1.1a",
         "----Flycast----",

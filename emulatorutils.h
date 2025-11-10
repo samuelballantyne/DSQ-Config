@@ -16,6 +16,7 @@ public:
     static QString mapRom(const QString &rom);
     static void mapEmulator(QString &emulator, QString &demulShooterExe);
     static void setupEmulatorComboBox(QComboBox *emulatorComboBox);
+    static QString demulRunParameter(const QString &romCode);
 
 private:
     // Any private constants/methods if needed
