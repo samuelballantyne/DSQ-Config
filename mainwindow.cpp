@@ -17,7 +17,12 @@
 #include <QVariant>
 #include <QProcess>
 #include <QLineEdit>
+#include <QComboBox>
+#include <QTextEdit>
 #include <QtGlobal>
+#include <QSettings>
+#include <QCoreApplication>
+#include <QSignalBlocker>
 
 // Global color definitions.
 QColor customRed(255, 0, 0);      // Red using RGB values
@@ -55,10 +60,10 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->setupUi(this);
 
     initializeUI();
-    
+
     // Initialize the syntax highlighter for the plain text edit.
     new IniSyntaxHighlighter(ui->plainTextEdit_Generic->document());
-    
+
     // Set platform-appropriate default paths
     #ifdef Q_OS_WIN
     ui->qmamehookerPathLineEdit->setText("C:/QMamehook");
@@ -67,10 +72,13 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->qmamehookerPathLineEdit->setText(QDir::homePath() + "/QMamehook");
     ui->demulShooterPathLineEdit->setText(QDir::homePath() + "/DemulShooter");
     #endif
+
+    loadSettings();
 }
 
 MainWindow::~MainWindow()
 {
+    saveSettings();
     delete ui;
 }
 
@@ -2064,6 +2072,128 @@ void MainWindow::updateBatCommandLine() {
         lines[0] = line;
         ui->plainTextEdit_Bat->setPlainText(lines.join('\n'));
     }
+}
+
+void MainWindow::loadSettings() {
+    const QString settingsPath = QDir(QCoreApplication::applicationDirPath()).filePath("settings.ini");
+    QSettings settings(settingsPath, QSettings::IniFormat);
+
+    settings.beginGroup("Paths");
+    ui->emulatorPathLineEdit->setText(settings.value("Emulator", ui->emulatorPathLineEdit->text()).toString());
+    ui->romPathLineEdit->setText(settings.value("Roms", ui->romPathLineEdit->text()).toString());
+    ui->demulShooterPathLineEdit->setText(settings.value("DemulShooter", ui->demulShooterPathLineEdit->text()).toString());
+    ui->qmamehookerPathLineEdit->setText(settings.value("QMamehook", ui->qmamehookerPathLineEdit->text()).toString());
+    settings.endGroup();
+
+    settings.beginGroup("General");
+    ui->demulShooterArgsLineEdit->setText(settings.value("DemulShooterArgs", ui->demulShooterArgsLineEdit->text()).toString());
+    settings.endGroup();
+
+    settings.beginGroup("Outputs");
+    auto safeSetIndex = [](QComboBox *combo, int index) {
+        if (!combo) return;
+        if (index >= 0 && index < combo->count()) {
+            combo->setCurrentIndex(index);
+        }
+    };
+
+    {
+        QSignalBlocker blockP1(ui->P1Color);
+        QSignalBlocker blockP2(ui->P2Color);
+        QSignalBlocker blockP3(ui->P3Color);
+        QSignalBlocker blockP4(ui->P4Color);
+        safeSetIndex(ui->P1Color, settings.value("P1ColorIndex", ui->P1Color->currentIndex()).toInt());
+        safeSetIndex(ui->P2Color, settings.value("P2ColorIndex", ui->P2Color->currentIndex()).toInt());
+        safeSetIndex(ui->P3Color, settings.value("P3ColorIndex", ui->P3Color->currentIndex()).toInt());
+        safeSetIndex(ui->P4Color, settings.value("P4ColorIndex", ui->P4Color->currentIndex()).toInt());
+    }
+
+    {
+        QSignalBlocker blockRecoil(ui->Recoil);
+        QSignalBlocker blockRecoilText(ui->Recoil_Text);
+        safeSetIndex(ui->Recoil, settings.value("RecoilIndex", ui->Recoil->currentIndex()).toInt());
+        ui->Recoil_Text->setPlainText(settings.value("RecoilText", ui->Recoil_Text->toPlainText()).toString());
+    }
+
+    {
+        QSignalBlocker blockDamage(ui->Damaged);
+        QSignalBlocker blockDamageText(ui->Damaged_Text);
+        safeSetIndex(ui->Damaged, settings.value("DamagedIndex", ui->Damaged->currentIndex()).toInt());
+        ui->Damaged_Text->setPlainText(settings.value("DamagedText", ui->Damaged_Text->toPlainText()).toString());
+    }
+
+    {
+        QSignalBlocker blockClip(ui->Clip);
+        QSignalBlocker blockClipText(ui->Clip_Text);
+        safeSetIndex(ui->Clip, settings.value("ClipIndex", ui->Clip->currentIndex()).toInt());
+        ui->Clip_Text->setPlainText(settings.value("ClipText", ui->Clip_Text->toPlainText()).toString());
+    }
+
+    {
+        QSignalBlocker blockAmmo(ui->Ammo);
+        QSignalBlocker blockAmmoText(ui->Ammo_Text);
+        safeSetIndex(ui->Ammo, settings.value("AmmoIndex", ui->Ammo->currentIndex()).toInt());
+        ui->Ammo_Text->setPlainText(settings.value("AmmoText", ui->Ammo_Text->toPlainText()).toString());
+    }
+
+    {
+        QSignalBlocker blockLife(ui->Life);
+        QSignalBlocker blockLifeText(ui->Life_Text);
+        safeSetIndex(ui->Life, settings.value("LifeIndex", ui->Life->currentIndex()).toInt());
+        ui->Life_Text->setPlainText(settings.value("LifeText", ui->Life_Text->toPlainText()).toString());
+    }
+
+    {
+        QSignalBlocker blockCredits(ui->Credits);
+        QSignalBlocker blockCreditsText(ui->Credits_Text);
+        safeSetIndex(ui->Credits, settings.value("CreditsIndex", ui->Credits->currentIndex()).toInt());
+        ui->Credits_Text->setPlainText(settings.value("CreditsText", ui->Credits_Text->toPlainText()).toString());
+    }
+
+    settings.endGroup();
+}
+
+void MainWindow::saveSettings() {
+    const QString settingsPath = QDir(QCoreApplication::applicationDirPath()).filePath("settings.ini");
+    QSettings settings(settingsPath, QSettings::IniFormat);
+
+    settings.beginGroup("Paths");
+    settings.setValue("Emulator", ui->emulatorPathLineEdit->text());
+    settings.setValue("Roms", ui->romPathLineEdit->text());
+    settings.setValue("DemulShooter", ui->demulShooterPathLineEdit->text());
+    settings.setValue("QMamehook", ui->qmamehookerPathLineEdit->text());
+    settings.endGroup();
+
+    settings.beginGroup("General");
+    settings.setValue("DemulShooterArgs", ui->demulShooterArgsLineEdit->text());
+    settings.endGroup();
+
+    settings.beginGroup("Outputs");
+    settings.setValue("P1ColorIndex", ui->P1Color->currentIndex());
+    settings.setValue("P2ColorIndex", ui->P2Color->currentIndex());
+    settings.setValue("P3ColorIndex", ui->P3Color->currentIndex());
+    settings.setValue("P4ColorIndex", ui->P4Color->currentIndex());
+
+    settings.setValue("RecoilIndex", ui->Recoil->currentIndex());
+    settings.setValue("RecoilText", ui->Recoil_Text->toPlainText());
+
+    settings.setValue("DamagedIndex", ui->Damaged->currentIndex());
+    settings.setValue("DamagedText", ui->Damaged_Text->toPlainText());
+
+    settings.setValue("ClipIndex", ui->Clip->currentIndex());
+    settings.setValue("ClipText", ui->Clip_Text->toPlainText());
+
+    settings.setValue("AmmoIndex", ui->Ammo->currentIndex());
+    settings.setValue("AmmoText", ui->Ammo_Text->toPlainText());
+
+    settings.setValue("LifeIndex", ui->Life->currentIndex());
+    settings.setValue("LifeText", ui->Life_Text->toPlainText());
+
+    settings.setValue("CreditsIndex", ui->Credits->currentIndex());
+    settings.setValue("CreditsText", ui->Credits_Text->toPlainText());
+    settings.endGroup();
+
+    settings.sync();
 }
 
 // Add this new function after initializeUI

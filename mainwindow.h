@@ -84,6 +84,10 @@ private:
     // New helper function to ensure comboboxes are properly set
     void updateAllComboBoxes();
     void updateBatCommandLine();
+
+    // Settings persistence helpers
+    void loadSettings();
+    void saveSettings();
 };
 
 #endif // MAINWINDOW_H
